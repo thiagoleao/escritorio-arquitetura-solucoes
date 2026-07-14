@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Word lock files
+~$*.docx
+~$*.doc
+
+# Claude Code local settings (machine/session-specific)
+.claude/settings.local.json
+
+# Dependencies
+node_modules/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+.next/
