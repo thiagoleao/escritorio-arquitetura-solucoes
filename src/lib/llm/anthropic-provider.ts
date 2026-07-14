@@ -16,7 +16,7 @@ export class AnthropicProvider implements LLMProvider {
   async generateArchitecturePlan(input: PlanInput): Promise<ArchitecturePlan> {
     const message = await this.client.messages.parse({
       model: this.model,
-      max_tokens: 8192,
+      max_tokens: 16384,
       system: SYSTEM_INSTRUCTIONS,
       messages: [{ role: "user", content: buildUserPrompt(input) }],
       output_config: {
