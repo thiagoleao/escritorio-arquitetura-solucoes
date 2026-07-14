@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.env*
+!.env.example
+ADR - ESCRITÓRIO DE ARQUITETURA SOLUÇÕES
+.claude
+*.docx

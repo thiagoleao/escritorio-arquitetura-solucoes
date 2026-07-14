@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { getLLMProvider } from "@/lib/llm";
+import {
+  extractFiles,
+  formatExtractedFilesText,
+  UnsupportedFileError,
+  FileTooLargeError,
+} from "@/lib/files/extract";
+
+export const runtime = "nodejs";
+
+function getStringField(formData: FormData, key: string): string {
+  const value = formData.get(key);
+  return typeof value === "string" ? value : "";
+}
+
+export async function POST(request: Request) {
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return NextResponse.json({ error: "Não foi possível ler o formulário enviado." }, { status: 400 });
+  }
+
+  const context = getStringField(formData, "context");
+  const objective = getStringField(formData, "objective");
+  const deliverables = getStringField(formData, "deliverables");
+  const constraints = getStringField(formData, "constraints");
+
+  if (!context.trim() || !objective.trim() || !deliverables.trim()) {
+    return NextResponse.json(
+      { error: "Contexto, objetivo e entregáveis são campos obrigatórios." },
+      { status: 400 }
+    );
+  }
+
+  const files = formData
+    .getAll("files")
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0 && entry.name !== "");
+
+  let extractedFilesText = "";
+  try {
+    const extracted = await extractFiles(files);
+    extractedFilesText = formatExtractedFilesText(extracted);
+  } catch (error) {
+    if (error instanceof UnsupportedFileError || error instanceof FileTooLargeError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    console.error("Falha ao extrair conteúdo dos arquivos", error);
+    return NextResponse.json({ error: "Falha ao extrair o conteúdo de um dos arquivos enviados." }, { status: 422 });
+  }
+
+  try {
+    const provider = getLLMProvider();
+    const plan = await provider.generateArchitecturePlan({
+      context,
+      objective,
+      deliverables,
+      constraints,
+      extractedFilesText,
+    });
+    return NextResponse.json(plan);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      console.error("Resposta do modelo fora do contrato esperado", error);
+      return NextResponse.json(
+        { error: "O modelo retornou uma resposta em formato inesperado. Tente novamente." },
+        { status: 502 }
+      );
+    }
+    console.error("Falha ao gerar o planejamento", error);
+    return NextResponse.json({ error: "Falha ao gerar o planejamento. Tente novamente." }, { status: 502 });
+  }
+}
