@@ -1,6 +1,18 @@
 import type { ArchitecturePlan } from "@/lib/schema";
 
-export function PlanResult({ plan }: { plan: ArchitecturePlan }) {
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  fez_sentido: "Fez sentido",
+  parcial: "Fez sentido parcialmente",
+  nao_fez_sentido: "Não fez sentido",
+};
+
+export function PlanResult({
+  plan,
+  activityClassifications,
+}: {
+  plan: ArchitecturePlan;
+  activityClassifications?: Record<string, string>;
+}) {
   return (
     <div className="flex flex-col gap-6">
       <Section title="Resumo">
@@ -52,6 +64,11 @@ export function PlanResult({ plan }: { plan: ArchitecturePlan }) {
                 </span>
               </div>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
+              {activityClassifications?.[activity.id] && (
+                <p className="mt-1 text-xs font-medium text-blue-700 dark:text-blue-300">
+                  Classificação: {CLASSIFICATION_LABELS[activityClassifications[activity.id]] ?? activityClassifications[activity.id]}
+                </p>
+              )}
               <p className="mt-2 text-xs text-gray-500">Marco: {activity.milestone_id}</p>
               <p className="text-xs text-gray-500">
                 Dependências: {activity.dependencies.length ? activity.dependencies.join(", ") : "nenhuma"}

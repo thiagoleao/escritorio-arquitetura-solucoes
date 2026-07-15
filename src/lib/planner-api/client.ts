@@ -22,6 +22,22 @@ export interface PlanningSummary {
   project_name: string | null;
 }
 
+export type ActivityClassification = "fez_sentido" | "parcial" | "nao_fez_sentido";
+
+export interface ActivityFeedback {
+  activity_external_id: string;
+  classification: ActivityClassification;
+}
+
+export interface PlanningFeedback {
+  utility_score: number;
+  coverage_score: number;
+  sequence_quality_score: number;
+  detail_level_score: number;
+  objective_adherence_score: number;
+  notes?: string | null;
+}
+
 export interface PlanningDetail {
   planning: PlanningSummary & {
     company_id: string;
@@ -37,6 +53,8 @@ export interface PlanningDetail {
     summary: string;
     assumptions: string[];
     missing_information: string[];
+    created_by: string;
+    notes: string | null;
   };
   milestones: Array<{ external_id: string; title: string; objective: string; completion_criteria: string[] }>;
   activities: Array<{
@@ -49,6 +67,45 @@ export interface PlanningDetail {
     status: "ready" | "blocked";
   }>;
   blockers: Array<{ description: string; related_activity_external_ids: string[] }>;
+  activity_feedback: ActivityFeedback[];
+  planning_feedback: (PlanningFeedback & { id: string }) | null;
+}
+
+export interface PlanningVersionSummary {
+  version_number: number;
+  created_by: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreateVersionInput {
+  milestones: Array<{
+    external_id?: string | null;
+    title: string;
+    objective: string;
+    completion_criteria: string[];
+  }>;
+  activities: Array<{
+    external_id?: string | null;
+    milestone_external_id: string;
+    title: string;
+    description: string;
+    expected_output: string;
+    dependencies: string[];
+    status: "ready" | "blocked";
+  }>;
+  blockers: Array<{ description: string; related_activity_external_ids: string[] }>;
+  activity_feedback?: ActivityFeedback[];
+  planning_feedback?: PlanningFeedback;
+  notes?: string;
+}
+
+export interface ChangeSummary {
+  accepted_unchanged: number;
+  edited: number;
+  removed: number;
+  added: number;
+  moved: number;
 }
 
 export interface CreatePlanningInput {
@@ -134,6 +191,30 @@ export async function listPlannings(filters: {
 export async function getPlanning(id: string): Promise<PlanningDetail> {
   const response = await authenticatedFetch(`/plannings/${id}`);
   return parseJsonOrThrow(response, "buscar o planejamento");
+}
+
+export async function updatePlanningStatus(id: string, status: string): Promise<{ planning_id: string; status: string }> {
+  const response = await authenticatedFetch(`/plannings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+  return parseJsonOrThrow(response, "atualizar o status do planejamento");
+}
+
+export async function listPlanningVersions(id: string): Promise<PlanningVersionSummary[]> {
+  const response = await authenticatedFetch(`/plannings/${id}/versions`);
+  return parseJsonOrThrow(response, "listar versões do planejamento");
+}
+
+export async function createPlanningVersion(
+  id: string,
+  input: CreateVersionInput
+): Promise<{ planning_id: string; version_number: number; change_summary: ChangeSummary }> {
+  const response = await authenticatedFetch(`/plannings/${id}/versions`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response, "salvar a nova versão do planejamento");
 }
 
 export async function listCompanies(query: string = ""): Promise<Company[]> {
