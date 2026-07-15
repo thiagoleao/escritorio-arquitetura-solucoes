@@ -7,6 +7,7 @@ import type {
   CreateVersionInput,
   PlanningDetail,
 } from "@/lib/planner-api/client";
+import { clearDraft, readDraft, useDraftPersistence } from "@/lib/form-draft";
 
 type EditableMilestone = {
   clientKey: string;
@@ -29,6 +30,21 @@ type EditableActivity = {
   removed: boolean;
   classification: ActivityClassification | "";
 };
+
+interface PlanEditorDraft {
+  milestones: EditableMilestone[];
+  activities: EditableActivity[];
+  evaluate: boolean;
+  scores: {
+    utility_score: number;
+    coverage_score: number;
+    sequence_quality_score: number;
+    detail_level_score: number;
+    objective_adherence_score: number;
+  };
+  evaluationNotes: string;
+  versionNotes: string;
+}
 
 const CLASSIFICATION_LABELS: Record<ActivityClassification, string> = {
   fez_sentido: "Fez sentido",
@@ -85,20 +101,39 @@ function swap<T>(items: T[], index: number, direction: -1 | 1): T[] {
 
 export function PlanEditor({ planningId, detail }: { planningId: string; detail: PlanningDetail }) {
   const router = useRouter();
-  const [milestones, setMilestones] = useState<EditableMilestone[]>(() => toEditableMilestones(detail));
-  const [activities, setActivities] = useState<EditableActivity[]>(() => toEditableActivities(detail));
-  const [evaluate, setEvaluate] = useState(false);
-  const [scores, setScores] = useState({
-    utility_score: 3,
-    coverage_score: 3,
-    sequence_quality_score: 3,
-    detail_level_score: 3,
-    objective_adherence_score: 3,
-  });
-  const [evaluationNotes, setEvaluationNotes] = useState("");
-  const [versionNotes, setVersionNotes] = useState("");
+  const draftKey = `planner:draft:edit:${planningId}`;
+  const [draft] = useState(() => readDraft<PlanEditorDraft>(draftKey));
+
+  const [milestones, setMilestones] = useState<EditableMilestone[]>(
+    () => draft?.milestones ?? toEditableMilestones(detail)
+  );
+  const [activities, setActivities] = useState<EditableActivity[]>(
+    () => draft?.activities ?? toEditableActivities(detail)
+  );
+  const [evaluate, setEvaluate] = useState(() => draft?.evaluate ?? false);
+  const [scores, setScores] = useState(
+    () =>
+      draft?.scores ?? {
+        utility_score: 3,
+        coverage_score: 3,
+        sequence_quality_score: 3,
+        detail_level_score: 3,
+        objective_adherence_score: 3,
+      }
+  );
+  const [evaluationNotes, setEvaluationNotes] = useState(() => draft?.evaluationNotes ?? "");
+  const [versionNotes, setVersionNotes] = useState(() => draft?.versionNotes ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useDraftPersistence<PlanEditorDraft>(draftKey, {
+    milestones,
+    activities,
+    evaluate,
+    scores,
+    evaluationNotes,
+    versionNotes,
+  });
 
   const activeMilestones = milestones.filter((m) => !m.removed);
 
@@ -204,6 +239,7 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
       if (!response.ok) {
         throw new Error(data.error ?? "Falha ao salvar a nova versão.");
       }
+      clearDraft(draftKey);
       router.push(`/planejamentos/${planningId}`);
       router.refresh();
     } catch (err) {

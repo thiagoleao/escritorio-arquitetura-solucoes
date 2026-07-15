@@ -5,8 +5,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchitecturePlan } from "@/lib/schema";
 import { formatPlanAsText } from "@/lib/format-plan";
 import { PlanResult } from "@/components/PlanResult";
+import { clearDraft, readDraft, useDraftPersistence } from "@/lib/form-draft";
 
 const ACCEPTED_EXTENSIONS = ".pdf,.txt,.md,.docx";
+const DRAFT_KEY = "planner:draft:new";
+
+interface NewPlanDraft {
+  company: string;
+  project: string;
+  context: string;
+  objective: string;
+  deliverables: string;
+  constraints: string;
+}
 
 interface NamedOption {
   id: string;
@@ -26,8 +37,8 @@ interface GenerateResponse extends ArchitecturePlan {
   references_used?: ReferenceUsed[];
 }
 
-function useAutocomplete(fetchUrl: (query: string) => string | null) {
-  const [query, setQuery] = useState("");
+function useAutocomplete(fetchUrl: (query: string) => string | null, initialQuery = "") {
+  const [query, setQuery] = useState(initialQuery);
   const [options, setOptions] = useState<NamedOption[]>([]);
 
   useEffect(() => {
@@ -59,12 +70,30 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const company = useAutocomplete((query) => (query.trim() ? `/api/companies?q=${encodeURIComponent(query)}` : null));
+  const [draft] = useState(() => readDraft<NewPlanDraft>(DRAFT_KEY));
+  const [formText, setFormText] = useState({
+    context: draft?.context ?? "",
+    objective: draft?.objective ?? "",
+    deliverables: draft?.deliverables ?? "",
+    constraints: draft?.constraints ?? "",
+  });
+
+  const company = useAutocomplete(
+    (query) => (query.trim() ? `/api/companies?q=${encodeURIComponent(query)}` : null),
+    draft?.company ?? ""
+  );
   const matchedCompany = company.options.find((option) => option.name === company.query) ?? null;
 
-  const project = useAutocomplete((query) =>
-    matchedCompany ? `/api/projects?company_id=${matchedCompany.id}&q=${encodeURIComponent(query)}` : null
+  const project = useAutocomplete(
+    (query) => (matchedCompany ? `/api/projects?company_id=${matchedCompany.id}&q=${encodeURIComponent(query)}` : null),
+    draft?.project ?? ""
   );
+
+  useDraftPersistence<NewPlanDraft>(DRAFT_KEY, {
+    company: company.query,
+    project: project.query,
+    ...formText,
+  });
 
   const planAsText = useMemo(() => (plan ? formatPlanAsText(plan) : ""), [plan]);
 
@@ -87,6 +116,7 @@ export default function Home() {
         throw new Error(data.error ?? "Falha ao gerar o planejamento.");
       }
       setPlan(data as GenerateResponse);
+      clearDraft(DRAFT_KEY);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha inesperada ao gerar o planejamento.");
     } finally {
@@ -168,10 +198,33 @@ export default function Home() {
           </div>
         </div>
 
-        <Field label="Contexto da demanda" name="context" required />
-        <Field label="Objetivo da solução" name="objective" required />
-        <Field label="Entregáveis esperados" name="deliverables" required />
-        <Field label="Restrições e observações" name="constraints" />
+        <Field
+          label="Contexto da demanda"
+          name="context"
+          required
+          value={formText.context}
+          onChange={(value) => setFormText((prev) => ({ ...prev, context: value }))}
+        />
+        <Field
+          label="Objetivo da solução"
+          name="objective"
+          required
+          value={formText.objective}
+          onChange={(value) => setFormText((prev) => ({ ...prev, objective: value }))}
+        />
+        <Field
+          label="Entregáveis esperados"
+          name="deliverables"
+          required
+          value={formText.deliverables}
+          onChange={(value) => setFormText((prev) => ({ ...prev, deliverables: value }))}
+        />
+        <Field
+          label="Restrições e observações"
+          name="constraints"
+          value={formText.constraints}
+          onChange={(value) => setFormText((prev) => ({ ...prev, constraints: value }))}
+        />
 
         <div className="flex flex-col gap-1">
           <label htmlFor="files" className="text-sm font-medium">
@@ -256,10 +309,14 @@ function Field({
   label,
   name,
   required,
+  value,
+  onChange,
 }: {
   label: string;
   name: string;
   required?: boolean;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -272,6 +329,8 @@ function Field({
         name={name}
         required={required}
         rows={3}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
         className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
       />
     </div>
