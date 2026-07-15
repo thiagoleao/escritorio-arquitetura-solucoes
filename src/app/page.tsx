@@ -1,56 +1,62 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchitecturePlan } from "@/lib/schema";
+import { formatPlanAsText } from "@/lib/format-plan";
+import { PlanResult } from "@/components/PlanResult";
 
 const ACCEPTED_EXTENSIONS = ".pdf,.txt,.md,.docx";
 
-function formatPlanAsText(plan: ArchitecturePlan): string {
-  const lines: string[] = [];
-  lines.push(`Resumo\n${plan.summary}`);
+interface NamedOption {
+  id: string;
+  name: string;
+}
 
-  if (plan.assumptions.length) {
-    lines.push(`Premissas\n${plan.assumptions.map((item) => `- ${item}`).join("\n")}`);
-  }
-  if (plan.missing_information.length) {
-    lines.push(
-      `Informações ausentes\n${plan.missing_information.map((item) => `- ${item}`).join("\n")}`
-    );
-  }
+interface GenerateResponse extends ArchitecturePlan {
+  planning_id?: string;
+  save_warning?: string;
+}
 
-  lines.push(
-    `Marcos\n${plan.milestones
-      .map((m) => `${m.id} - ${m.title}\n  Objetivo: ${m.objective}\n  Critérios: ${m.completion_criteria.join("; ")}`)
-      .join("\n")}`
-  );
+function useAutocomplete(fetchUrl: (query: string) => string | null) {
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<NamedOption[]>([]);
 
-  lines.push(
-    `Atividades\n${plan.activities
-      .map(
-        (a) =>
-          `${a.id} - ${a.title} [${a.status}] (marco ${a.milestone_id})\n  ${a.description}\n  Dependências: ${
-            a.dependencies.length ? a.dependencies.join(", ") : "nenhuma"
-          }\n  Resultado esperado: ${a.expected_output}`
-      )
-      .join("\n")}`
-  );
+  useEffect(() => {
+    const url = fetchUrl(query);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      if (url === null) {
+        setOptions([]);
+        return;
+      }
+      fetch(url, { signal: controller.signal })
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => setOptions(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    }, 250);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [query, fetchUrl]);
 
-  if (plan.blockers.length) {
-    lines.push(
-      `Bloqueios\n${plan.blockers
-        .map((b) => `- ${b.description} (atividades: ${b.related_activity_ids.join(", ") || "nenhuma"})`)
-        .join("\n")}`
-    );
-  }
-
-  return lines.join("\n\n");
+  return { query, setQuery, options };
 }
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<ArchitecturePlan | null>(null);
+  const [plan, setPlan] = useState<GenerateResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const company = useAutocomplete((query) => (query.trim() ? `/api/companies?q=${encodeURIComponent(query)}` : null));
+  const matchedCompany = company.options.find((option) => option.name === company.query) ?? null;
+
+  const project = useAutocomplete((query) =>
+    matchedCompany ? `/api/projects?company_id=${matchedCompany.id}&q=${encodeURIComponent(query)}` : null
+  );
 
   const planAsText = useMemo(() => (plan ? formatPlanAsText(plan) : ""), [plan]);
 
@@ -72,7 +78,7 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(data.error ?? "Falha ao gerar o planejamento.");
       }
-      setPlan(data as ArchitecturePlan);
+      setPlan(data as GenerateResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha inesperada ao gerar o planejamento.");
     } finally {
@@ -88,15 +94,64 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
-      <header>
-        <h1 className="text-2xl font-semibold">Planejador de Soluções de Arquitetura</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Descreva a demanda e gere um roadmap com marcos, atividades, dependências e bloqueios. Nada é
-          salvo — copie o resultado ao final.
-        </p>
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Planejador de Soluções de Arquitetura</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Descreva a demanda e gere um roadmap com marcos, atividades, dependências e bloqueios.
+          </p>
+        </div>
+        <Link
+          href="/planejamentos"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+        >
+          Ver histórico
+        </Link>
       </header>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="company" className="text-sm font-medium">
+              Empresa <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="company"
+              name="company"
+              required
+              list="company-options"
+              value={company.query}
+              onChange={(event) => company.setQuery(event.target.value)}
+              className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            />
+            <datalist id="company-options">
+              {company.options.map((option) => (
+                <option key={option.id} value={option.name} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="project" className="text-sm font-medium">
+              Projeto
+            </label>
+            <input
+              id="project"
+              name="project"
+              list="project-options"
+              value={project.query}
+              onChange={(event) => project.setQuery(event.target.value)}
+              disabled={!matchedCompany && company.query.trim() === ""}
+              className="rounded-md border border-gray-300 p-2 text-sm disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
+            />
+            <datalist id="project-options">
+              {project.options.map((option) => (
+                <option key={option.id} value={option.name} />
+              ))}
+            </datalist>
+          </div>
+        </div>
+
         <Field label="Contexto da demanda" name="context" required />
         <Field label="Objetivo da solução" name="objective" required />
         <Field label="Entregáveis esperados" name="deliverables" required />
@@ -144,81 +199,21 @@ export default function Home() {
             </button>
           </div>
 
-          <Section title="Resumo">
-            <p className="text-sm">{plan.summary}</p>
-          </Section>
-
-          {plan.assumptions.length > 0 && (
-            <Section title="Premissas">
-              <BulletList items={plan.assumptions} />
-            </Section>
+          {plan.save_warning && (
+            <p className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+              {plan.save_warning}
+            </p>
+          )}
+          {plan.planning_id && (
+            <p className="text-sm text-gray-500">
+              Salvo no histórico —{" "}
+              <Link href={`/planejamentos/${plan.planning_id}`} className="underline">
+                ver planejamento
+              </Link>
+            </p>
           )}
 
-          {plan.missing_information.length > 0 && (
-            <Section title="Informações ausentes">
-              <BulletList items={plan.missing_information} />
-            </Section>
-          )}
-
-          <Section title="Marcos">
-            <ul className="flex flex-col gap-3">
-              {plan.milestones.map((milestone) => (
-                <li key={milestone.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                  <p className="text-sm font-medium">
-                    {milestone.id} — {milestone.title}
-                  </p>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{milestone.objective}</p>
-                  <BulletList items={milestone.completion_criteria} className="mt-2" />
-                </li>
-              ))}
-            </ul>
-          </Section>
-
-          <Section title="Atividades">
-            <ul className="flex flex-col gap-3">
-              {plan.activities.map((activity) => (
-                <li key={activity.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">
-                      {activity.id} — {activity.title}
-                    </p>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        activity.status === "blocked"
-                          ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
-                          : "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
-                      }`}
-                    >
-                      {activity.status === "blocked" ? "bloqueada" : "pronta"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{activity.description}</p>
-                  <p className="mt-2 text-xs text-gray-500">Marco: {activity.milestone_id}</p>
-                  <p className="text-xs text-gray-500">
-                    Dependências: {activity.dependencies.length ? activity.dependencies.join(", ") : "nenhuma"}
-                  </p>
-                  <p className="text-xs text-gray-500">Resultado esperado: {activity.expected_output}</p>
-                </li>
-              ))}
-            </ul>
-          </Section>
-
-          {plan.blockers.length > 0 && (
-            <Section title="Bloqueios">
-              <ul className="flex flex-col gap-2">
-                {plan.blockers.map((blocker, index) => (
-                  <li key={index} className="text-sm">
-                    <p>{blocker.description}</p>
-                    {blocker.related_activity_ids.length > 0 && (
-                      <p className="text-xs text-gray-500">
-                        Atividades relacionadas: {blocker.related_activity_ids.join(", ")}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          )}
+          <PlanResult plan={plan} />
         </section>
       )}
     </main>
@@ -248,24 +243,5 @@ function Field({
         className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
       />
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function BulletList({ items, className = "" }: { items: string[]; className?: string }) {
-  return (
-    <ul className={`list-inside list-disc text-sm text-gray-700 dark:text-gray-300 ${className}`}>
-      {items.map((item, index) => (
-        <li key={index}>{item}</li>
-      ))}
-    </ul>
   );
 }

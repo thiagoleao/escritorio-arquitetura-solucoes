@@ -7,6 +7,7 @@ import {
   UnsupportedFileError,
   FileTooLargeError,
 } from "@/lib/files/extract";
+import { createPlanning } from "@/lib/planner-api/client";
 
 export const runtime = "nodejs";
 
@@ -23,14 +24,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não foi possível ler o formulário enviado." }, { status: 400 });
   }
 
+  const company = getStringField(formData, "company");
+  const project = getStringField(formData, "project");
   const context = getStringField(formData, "context");
   const objective = getStringField(formData, "objective");
   const deliverables = getStringField(formData, "deliverables");
   const constraints = getStringField(formData, "constraints");
 
-  if (!context.trim() || !objective.trim() || !deliverables.trim()) {
+  if (!company.trim() || !context.trim() || !objective.trim() || !deliverables.trim()) {
     return NextResponse.json(
-      { error: "Contexto, objetivo e entregáveis são campos obrigatórios." },
+      { error: "Empresa, contexto, objetivo e entregáveis são campos obrigatórios." },
       { status: 400 }
     );
   }
@@ -60,7 +63,26 @@ export async function POST(request: Request) {
       constraints,
       extractedFilesText,
     });
-    return NextResponse.json(plan);
+
+    let planningId: string | undefined;
+    let saveWarning: string | undefined;
+    try {
+      const saved = await createPlanning({
+        company,
+        project: project || undefined,
+        context,
+        objective,
+        deliverables,
+        constraints: constraints || undefined,
+        plan,
+      });
+      planningId = saved.planning_id;
+    } catch (saveError) {
+      console.error("Falha ao salvar planejamento no histórico", saveError);
+      saveWarning = "O planejamento foi gerado, mas não foi possível salvá-lo no histórico.";
+    }
+
+    return NextResponse.json({ ...plan, planning_id: planningId, save_warning: saveWarning });
   } catch (error) {
     if (error instanceof ZodError) {
       console.error("Resposta do modelo fora do contrato esperado", error);
