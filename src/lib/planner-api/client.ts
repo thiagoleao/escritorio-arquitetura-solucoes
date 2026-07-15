@@ -121,6 +121,23 @@ export interface CreatePlanningInput {
   embedding?: number[] | null;
 }
 
+export type ExecutionStatus = "todo" | "doing" | "done";
+
+export interface BoardActivity {
+  external_id: string;
+  title: string;
+  milestone_external_id: string;
+  execution_status: ExecutionStatus;
+}
+
+export interface BoardEntry {
+  planning_id: string;
+  company_name: string;
+  project_name: string | null;
+  completion_percentage: number;
+  activities: BoardActivity[];
+}
+
 let cachedAuth: GoogleAuth | null = null;
 
 function getBaseUrl(): string {
@@ -249,4 +266,28 @@ export async function semanticSearchPlannings(input: {
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(response, "buscar planejamentos por similaridade");
+}
+
+export async function getBoard(filters: { company?: string; status?: string } = {}): Promise<BoardEntry[]> {
+  const params = new URLSearchParams();
+  if (filters.company) params.set("company", filters.company);
+  if (filters.status) params.set("status", filters.status);
+
+  const response = await authenticatedFetch(`/board?${params.toString()}`);
+  return parseJsonOrThrow(response, "buscar o board");
+}
+
+export async function updateActivityExecutionStatus(
+  planningId: string,
+  activityExternalId: string,
+  status: ExecutionStatus
+): Promise<{ planning_id: string; activity_external_id: string; status: ExecutionStatus }> {
+  const response = await authenticatedFetch(
+    `/plannings/${planningId}/activities/${activityExternalId}/status`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }
+  );
+  return parseJsonOrThrow(response, "atualizar o status de execução da atividade");
 }

@@ -109,12 +109,20 @@ export default function Home() {
             Descreva a demanda e gere um roadmap com marcos, atividades, dependências e bloqueios.
           </p>
         </div>
-        <Link
-          href="/planejamentos"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-        >
-          Ver histórico
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/quadro"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          >
+            Quadro
+          </Link>
+          <Link
+            href="/planejamentos"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          >
+            Ver histórico
+          </Link>
+        </div>
       </header>
 
       <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-5">

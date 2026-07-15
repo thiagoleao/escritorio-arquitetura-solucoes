@@ -44,12 +44,20 @@ export default async function PlanejamentosPage({
           <h1 className="text-2xl font-semibold">Planejamentos</h1>
           <p className="mt-1 text-sm text-gray-500">Histórico de planejamentos gerados.</p>
         </div>
-        <Link
-          href="/"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-        >
-          Novo planejamento
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/quadro"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          >
+            Quadro
+          </Link>
+          <Link
+            href="/"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          >
+            Novo planejamento
+          </Link>
+        </div>
       </header>
 
       <form className="flex gap-2">

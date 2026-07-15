@@ -17,6 +17,7 @@ SERVICE_API_KEY = os.environ["SERVICE_API_KEY"]
 
 VALID_STATUSES = {"generated", "in_review", "reviewed", "approved", "archived"}
 VALID_CLASSIFICATIONS = {"fez_sentido", "parcial", "nao_fez_sentido"}
+VALID_EXECUTION_STATUSES = {"todo", "doing", "done"}
 
 MILESTONE_COMPARE_FIELDS = ["title", "objective", "completion_criteria"]
 ACTIVITY_COMPARE_FIELDS = [
@@ -386,6 +387,111 @@ def list_plannings():
             )
             rows = cursor.fetchall()
     return jsonify(rows)
+
+
+@app.get("/board")
+@require_api_key
+def get_board():
+    company = request.args.get("company")
+    status = request.args.get("status", "approved")
+
+    clauses = ["pl.status = %s"]
+    parameters = [status]
+    if company:
+        clauses.append("c.name ILIKE %s")
+        parameters.append(f"%{company}%")
+    where = "WHERE " + " AND ".join(clauses)
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                f"""
+                SELECT pl.id AS planning_id, c.name AS company_name, p.name AS project_name,
+                       pv.id AS version_id
+                FROM plannings pl
+                JOIN companies c ON c.id = pl.company_id
+                LEFT JOIN projects p ON p.id = pl.project_id
+                JOIN planning_versions pv ON pv.id = (
+                    SELECT id FROM planning_versions
+                    WHERE planning_id = pl.id AND version_number = pl.current_version
+                )
+                {where}
+                ORDER BY c.name, p.name
+                """,
+                parameters,
+            )
+            plannings = cursor.fetchall()
+
+            board = []
+            for planning in plannings:
+                cursor.execute(
+                    """
+                    SELECT a.external_id, a.title, a.milestone_external_id,
+                           COALESCE(ae.status, 'todo') AS execution_status
+                    FROM activities a
+                    LEFT JOIN activity_execution ae
+                        ON ae.planning_id = %s AND ae.activity_external_id = a.external_id
+                    WHERE a.planning_version_id = %s
+                    ORDER BY a.position
+                    """,
+                    (planning["planning_id"], planning["version_id"]),
+                )
+                activities = cursor.fetchall()
+                total = len(activities)
+                done = sum(1 for activity in activities if activity["execution_status"] == "done")
+                completion_percentage = round((done / total) * 100) if total else 0
+
+                board.append({
+                    "planning_id": planning["planning_id"],
+                    "company_name": planning["company_name"],
+                    "project_name": planning["project_name"],
+                    "completion_percentage": completion_percentage,
+                    "activities": activities,
+                })
+
+    return jsonify(board)
+
+
+@app.patch("/plannings/<planning_id>/activities/<activity_external_id>/status")
+@require_api_key
+def update_activity_execution_status(planning_id, activity_external_id):
+    payload = request.get_json(silent=True) or {}
+    status = payload.get("status")
+    if status not in VALID_EXECUTION_STATUSES:
+        return jsonify({"error": "Invalid status", "allowed": sorted(VALID_EXECUTION_STATUSES)}), 400
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                "SELECT status FROM activity_execution WHERE planning_id = %s AND activity_external_id = %s",
+                (planning_id, activity_external_id),
+            )
+            row = cursor.fetchone()
+            previous_status = row["status"] if row else None
+
+            cursor.execute(
+                """
+                INSERT INTO activity_execution (planning_id, activity_external_id, status)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (planning_id, activity_external_id)
+                DO UPDATE SET status = EXCLUDED.status, updated_at = NOW()
+                """,
+                (planning_id, activity_external_id, status),
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO activity_status_history (planning_id, activity_external_id, from_status, to_status)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (planning_id, activity_external_id, previous_status, status),
+            )
+
+    return jsonify({
+        "planning_id": planning_id,
+        "activity_external_id": activity_external_id,
+        "status": status,
+    })
 
 
 @app.get("/plannings/<planning_id>/similar")
