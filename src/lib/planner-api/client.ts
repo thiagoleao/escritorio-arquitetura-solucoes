@@ -100,6 +100,7 @@ export interface CreateVersionInput {
   planning_feedback?: PlanningFeedback;
   notes?: string;
   embedding?: number[] | null;
+  created_by?: string;
 }
 
 export interface ChangeSummary {
@@ -174,10 +175,19 @@ async function authenticatedFetch(path: string, init?: RequestInit): Promise<Res
   return fetch(url, { ...init, headers });
 }
 
+export class PlannerApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function parseJsonOrThrow<T>(response: Response, action: string): Promise<T> {
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(`Falha ao ${action}: ${response.status} ${text}`);
+    throw new PlannerApiError(response.status, `Falha ao ${action}: ${response.status} ${text}`);
   }
   return response.json() as Promise<T>;
 }
@@ -280,14 +290,81 @@ export async function getBoard(filters: { company?: string; status?: string } = 
 export async function updateActivityExecutionStatus(
   planningId: string,
   activityExternalId: string,
-  status: ExecutionStatus
+  status: ExecutionStatus,
+  changedBy?: string
 ): Promise<{ planning_id: string; activity_external_id: string; status: ExecutionStatus }> {
   const response = await authenticatedFetch(
     `/plannings/${planningId}/activities/${activityExternalId}/status`,
     {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, changed_by: changedBy }),
     }
   );
   return parseJsonOrThrow(response, "atualizar o status de execução da atividade");
+}
+
+export type UserRole = "admin" | "member";
+
+export interface AuthenticatedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateUserInput {
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+}
+
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+  role?: UserRole;
+  is_active?: boolean;
+  password?: string;
+}
+
+export async function verifyCredentials(email: string, password: string): Promise<AuthenticatedUser | null> {
+  const response = await authenticatedFetch("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  if (response.status === 401) {
+    return null;
+  }
+  return parseJsonOrThrow(response, "autenticar o usuário");
+}
+
+export async function listUsers(): Promise<AdminUser[]> {
+  const response = await authenticatedFetch("/users");
+  return parseJsonOrThrow(response, "listar usuários");
+}
+
+export async function createUser(input: CreateUserInput): Promise<AdminUser> {
+  const response = await authenticatedFetch("/users", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response, "criar usuário");
+}
+
+export async function updateUser(id: string, input: UpdateUserInput): Promise<AdminUser> {
+  const response = await authenticatedFetch(`/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response, "atualizar usuário");
 }

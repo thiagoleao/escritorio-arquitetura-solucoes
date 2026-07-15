@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { updateActivityExecutionStatus, type ExecutionStatus } from "@/lib/planner-api/client";
 
 export const runtime = "nodejs";
@@ -17,7 +18,13 @@ export async function PATCH(
   }
 
   try {
-    const result = await updateActivityExecutionStatus(planningId, externalId, body.status as ExecutionStatus);
+    const session = await auth();
+    const result = await updateActivityExecutionStatus(
+      planningId,
+      externalId,
+      body.status as ExecutionStatus,
+      session?.user?.email ?? undefined
+    );
     return NextResponse.json(result);
   } catch (error) {
     console.error("Falha ao atualizar status de execução da atividade", error);

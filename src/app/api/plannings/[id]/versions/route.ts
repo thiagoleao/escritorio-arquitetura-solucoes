@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { createPlanningVersion, getPlanning, type CreateVersionInput } from "@/lib/planner-api/client";
 import { createEmbedding } from "@/lib/embeddings/openai";
 import { buildEmbeddingText } from "@/lib/embeddings/text";
@@ -30,7 +31,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const result = await createPlanningVersion(id, { ...body, embedding });
+    const session = await auth();
+    const result = await createPlanningVersion(id, {
+      ...body,
+      embedding,
+      created_by: session?.user?.email ?? "user",
+    });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error("Falha ao criar nova versão do planejamento", error);

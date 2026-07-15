@@ -2,6 +2,7 @@ import hmac
 import os
 from functools import wraps
 
+import bcrypt
 import psycopg2
 from flask import Flask, jsonify, request
 from pgvector.psycopg2 import register_vector
@@ -18,6 +19,7 @@ SERVICE_API_KEY = os.environ["SERVICE_API_KEY"]
 VALID_STATUSES = {"generated", "in_review", "reviewed", "approved", "archived"}
 VALID_CLASSIFICATIONS = {"fez_sentido", "parcial", "nao_fez_sentido"}
 VALID_EXECUTION_STATUSES = {"todo", "doing", "done"}
+VALID_ROLES = {"admin", "member"}
 
 MILESTONE_COMPARE_FIELDS = ["title", "objective", "completion_criteria"]
 ACTIVITY_COMPARE_FIELDS = [
@@ -100,6 +102,140 @@ def list_projects():
             )
             rows = cursor.fetchall()
     return jsonify(rows)
+
+
+@app.post("/auth/login")
+@require_api_key
+def login():
+    payload = request.get_json(silent=True) or {}
+    email = payload.get("email")
+    password = payload.get("password")
+    if not email or not password:
+        return jsonify({"error": "Missing required fields", "fields": ["email", "password"]}), 400
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                "SELECT id, name, email, password_hash, role, is_active FROM users WHERE email = %s",
+                (email,),
+            )
+            user = cursor.fetchone()
+
+    if (
+        not user
+        or not user["is_active"]
+        or not bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8"))
+    ):
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    return jsonify({
+        "id": user["id"],
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"],
+    })
+
+
+@app.get("/users")
+@require_api_key
+def list_users():
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT id, name, email, role, is_active, created_at, updated_at
+                FROM users
+                ORDER BY name
+                """
+            )
+            rows = cursor.fetchall()
+    return jsonify(rows)
+
+
+@app.post("/users")
+@require_api_key
+def create_user():
+    payload = request.get_json(silent=True) or {}
+    name = payload.get("name")
+    email = payload.get("email")
+    password = payload.get("password")
+    role = payload.get("role")
+    if not name or not email or not password or not role:
+        return jsonify({"error": "Missing required fields", "fields": ["name", "email", "password", "role"]}), 400
+    if role not in VALID_ROLES:
+        return jsonify({"error": "Invalid role", "allowed": sorted(VALID_ROLES)}), 400
+
+    password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    try:
+        with get_connection() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO users (name, email, password_hash, role)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, name, email, role, is_active, created_at, updated_at
+                    """,
+                    (name, email, password_hash, role),
+                )
+                user = cursor.fetchone()
+    except psycopg2.errors.UniqueViolation:
+        return jsonify({"error": "Email already in use"}), 409
+
+    return jsonify(user), 201
+
+
+@app.patch("/users/<user_id>")
+@require_api_key
+def update_user(user_id):
+    payload = request.get_json(silent=True) or {}
+
+    fields = []
+    values = []
+
+    if "name" in payload:
+        fields.append("name = %s")
+        values.append(payload["name"])
+    if "email" in payload:
+        fields.append("email = %s")
+        values.append(payload["email"])
+    if "role" in payload:
+        if payload["role"] not in VALID_ROLES:
+            return jsonify({"error": "Invalid role", "allowed": sorted(VALID_ROLES)}), 400
+        fields.append("role = %s")
+        values.append(payload["role"])
+    if "is_active" in payload:
+        fields.append("is_active = %s")
+        values.append(bool(payload["is_active"]))
+    if "password" in payload:
+        password_hash = bcrypt.hashpw(payload["password"].encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        fields.append("password_hash = %s")
+        values.append(password_hash)
+
+    if not fields:
+        return jsonify({"error": "No fields to update"}), 400
+
+    fields.append("updated_at = NOW()")
+    values.append(user_id)
+
+    try:
+        with get_connection() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE users SET {", ".join(fields)}
+                    WHERE id = %s
+                    RETURNING id, name, email, role, is_active, created_at, updated_at
+                    """,
+                    values,
+                )
+                user = cursor.fetchone()
+    except psycopg2.errors.UniqueViolation:
+        return jsonify({"error": "Email already in use"}), 409
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user)
 
 
 def find_or_create_company(cursor, name):
@@ -457,6 +593,7 @@ def get_board():
 def update_activity_execution_status(planning_id, activity_external_id):
     payload = request.get_json(silent=True) or {}
     status = payload.get("status")
+    changed_by = payload.get("changed_by")
     if status not in VALID_EXECUTION_STATUSES:
         return jsonify({"error": "Invalid status", "allowed": sorted(VALID_EXECUTION_STATUSES)}), 400
 
@@ -481,10 +618,10 @@ def update_activity_execution_status(planning_id, activity_external_id):
 
             cursor.execute(
                 """
-                INSERT INTO activity_status_history (planning_id, activity_external_id, from_status, to_status)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO activity_status_history (planning_id, activity_external_id, from_status, to_status, changed_by)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
-                (planning_id, activity_external_id, previous_status, status),
+                (planning_id, activity_external_id, previous_status, status, changed_by),
             )
 
     return jsonify({
@@ -765,7 +902,7 @@ def create_planning_version(planning_id):
                 """
                 INSERT INTO planning_versions (
                     planning_id, version_number, summary, assumptions, missing_information, created_by, notes
-                ) VALUES (%s, %s, %s, %s, %s, 'user', %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -774,6 +911,7 @@ def create_planning_version(planning_id):
                     previous_version["summary"],
                     Json(previous_version["assumptions"]),
                     Json(previous_version["missing_information"]),
+                    payload.get("created_by", "user"),
                     payload.get("notes"),
                 ),
             )
