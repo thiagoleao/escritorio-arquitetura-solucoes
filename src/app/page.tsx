@@ -13,9 +13,17 @@ interface NamedOption {
   name: string;
 }
 
+interface ReferenceUsed {
+  planning_id: string;
+  company: string;
+  project: string | null;
+  similarity: number;
+}
+
 interface GenerateResponse extends ArchitecturePlan {
   planning_id?: string;
   save_warning?: string;
+  references_used?: ReferenceUsed[];
 }
 
 function useAutocomplete(fetchUrl: (query: string) => string | null) {
@@ -210,6 +218,22 @@ export default function Home() {
               <Link href={`/planejamentos/${plan.planning_id}`} className="underline">
                 ver planejamento
               </Link>
+            </p>
+          )}
+
+          {plan.references_used && plan.references_used.length > 0 && (
+            <p className="text-sm text-gray-500">
+              Baseado em planejamentos aprovados semelhantes:{" "}
+              {plan.references_used.map((reference, index) => (
+                <span key={reference.planning_id}>
+                  {index > 0 && ", "}
+                  <Link href={`/planejamentos/${reference.planning_id}`} className="underline">
+                    {reference.company}
+                    {reference.project ? ` — ${reference.project}` : ""} (
+                    {Math.round(reference.similarity * 100)}%)
+                  </Link>
+                </span>
+              ))}
             </p>
           )}
 

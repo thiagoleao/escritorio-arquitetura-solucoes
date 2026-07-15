@@ -10,6 +10,7 @@ import {
 import { createPlanning } from "@/lib/planner-api/client";
 import { createEmbedding } from "@/lib/embeddings/openai";
 import { buildEmbeddingText } from "@/lib/embeddings/text";
+import { findReferenceCases } from "@/lib/llm/references";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Falha ao extrair o conteúdo de um dos arquivos enviados." }, { status: 422 });
   }
 
+  const referenceCases = await findReferenceCases({
+    company,
+    project: project || undefined,
+    context,
+    objective,
+    deliverables,
+    constraints,
+  }).catch((error) => {
+    console.error("Falha ao buscar casos de referência", error);
+    return [];
+  });
+
   try {
     const provider = getLLMProvider();
     const plan = await provider.generateArchitecturePlan({
@@ -64,6 +77,7 @@ export async function POST(request: Request) {
       deliverables,
       constraints,
       extractedFilesText,
+      referenceCases,
     });
 
     let planningId: string | undefined;
@@ -95,7 +109,19 @@ export async function POST(request: Request) {
       saveWarning = "O planejamento foi gerado, mas não foi possível salvá-lo no histórico.";
     }
 
-    return NextResponse.json({ ...plan, planning_id: planningId, save_warning: saveWarning });
+    const referencesUsed = referenceCases.map((referenceCase) => ({
+      planning_id: referenceCase.planning_id,
+      company: referenceCase.company,
+      project: referenceCase.project,
+      similarity: referenceCase.similarity,
+    }));
+
+    return NextResponse.json({
+      ...plan,
+      planning_id: planningId,
+      save_warning: saveWarning,
+      references_used: referencesUsed,
+    });
   } catch (error) {
     if (error instanceof ZodError) {
       console.error("Resposta do modelo fora do contrato esperado", error);

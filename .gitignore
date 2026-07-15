@@ -47,6 +47,7 @@ next-env.d.ts
 
 # Claude Code local settings (machine/session-specific)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Python
 __pycache__/
