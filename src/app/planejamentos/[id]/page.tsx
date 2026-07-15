@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPlanning, listPlanningVersions, type PlanningFeedback } from "@/lib/planner-api/client";
+import { getPlanning, getSimilarPlannings, listPlanningVersions, type PlanningFeedback } from "@/lib/planner-api/client";
 import { planningDetailToArchitecturePlan } from "@/lib/planner-api/mapper";
 import { PlanResult } from "@/components/PlanResult";
 import { StatusActions } from "@/components/StatusActions";
@@ -30,6 +30,7 @@ export default async function PlanejamentoDetailPage({
   }
 
   const versions = await listPlanningVersions(id).catch(() => []);
+  const similarPlannings = await getSimilarPlannings(id, 5).catch(() => []);
   const plan = planningDetailToArchitecturePlan(detail);
   const activityClassifications = Object.fromEntries(
     detail.activity_feedback.map((feedback) => [feedback.activity_external_id, feedback.classification])
@@ -122,6 +123,31 @@ export default async function PlanejamentoDetailPage({
       <div className="border-t border-gray-200 pt-6 dark:border-gray-800">
         <PlanResult plan={plan} activityClassifications={activityClassifications} />
       </div>
+
+      {similarPlannings.length > 0 && (
+        <Section title="Planejamentos semelhantes">
+          <ul className="flex flex-col divide-y divide-gray-200 dark:divide-gray-800">
+            {similarPlannings.map((similar) => (
+              <li key={similar.id} className="py-2">
+                <Link
+                  href={`/planejamentos/${similar.id}`}
+                  className="flex items-center justify-between gap-4 text-sm hover:underline"
+                >
+                  <span>
+                    {similar.company_name}
+                    {similar.project_name ? ` — ${similar.project_name}` : ""}
+                  </span>
+                  {similar.similarity !== undefined && (
+                    <span className="text-xs text-gray-500">
+                      {Math.round(similar.similarity * 100)}% semelhante
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
     </main>
   );
 }

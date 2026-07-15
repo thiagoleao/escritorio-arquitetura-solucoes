@@ -20,6 +20,7 @@ export interface PlanningSummary {
   updated_at: string;
   company_name: string;
   project_name: string | null;
+  similarity?: number;
 }
 
 export type ActivityClassification = "fez_sentido" | "parcial" | "nao_fez_sentido";
@@ -98,6 +99,7 @@ export interface CreateVersionInput {
   activity_feedback?: ActivityFeedback[];
   planning_feedback?: PlanningFeedback;
   notes?: string;
+  embedding?: number[] | null;
 }
 
 export interface ChangeSummary {
@@ -116,6 +118,7 @@ export interface CreatePlanningInput {
   deliverables: string;
   constraints?: string;
   plan: ArchitecturePlan;
+  embedding?: number[] | null;
 }
 
 let cachedAuth: GoogleAuth | null = null;
@@ -227,4 +230,23 @@ export async function listProjects(companyId: string, query: string = ""): Promi
     `/projects?company_id=${encodeURIComponent(companyId)}&q=${encodeURIComponent(query)}`
   );
   return parseJsonOrThrow(response, "listar projetos");
+}
+
+export async function getSimilarPlannings(id: string, limit: number = 5): Promise<PlanningSummary[]> {
+  const response = await authenticatedFetch(`/plannings/${id}/similar?limit=${limit}`);
+  return parseJsonOrThrow(response, "buscar planejamentos semelhantes");
+}
+
+export async function semanticSearchPlannings(input: {
+  embedding: number[];
+  company?: string;
+  project?: string;
+  status?: string;
+  limit?: number;
+}): Promise<PlanningSummary[]> {
+  const response = await authenticatedFetch("/plannings/semantic-search", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response, "buscar planejamentos por similaridade");
 }

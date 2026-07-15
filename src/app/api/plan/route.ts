@@ -8,6 +8,8 @@ import {
   FileTooLargeError,
 } from "@/lib/files/extract";
 import { createPlanning } from "@/lib/planner-api/client";
+import { createEmbedding } from "@/lib/embeddings/openai";
+import { buildEmbeddingText } from "@/lib/embeddings/text";
 
 export const runtime = "nodejs";
 
@@ -67,6 +69,16 @@ export async function POST(request: Request) {
     let planningId: string | undefined;
     let saveWarning: string | undefined;
     try {
+      const embedding = await createEmbedding(
+        buildEmbeddingText({
+          context,
+          objective,
+          deliverables,
+          constraints,
+          milestones: plan.milestones,
+          activities: plan.activities,
+        })
+      );
       const saved = await createPlanning({
         company,
         project: project || undefined,
@@ -75,6 +87,7 @@ export async function POST(request: Request) {
         deliverables,
         constraints: constraints || undefined,
         plan,
+        embedding,
       });
       planningId = saved.planning_id;
     } catch (saveError) {

@@ -4,6 +4,7 @@ from functools import wraps
 
 import psycopg2
 from flask import Flask, jsonify, request
+from pgvector.psycopg2 import register_vector
 from psycopg2.extras import Json, RealDictCursor
 
 app = Flask(__name__)
@@ -24,13 +25,15 @@ ACTIVITY_COMPARE_FIELDS = [
 
 
 def get_connection():
-    return psycopg2.connect(
+    connection = psycopg2.connect(
         dbname=DB_NAME,
         user=DB_USER,
         password=DB_PASSWORD,
         host=f"/cloudsql/{INSTANCE_CONNECTION_NAME}",
         connect_timeout=10,
     )
+    register_vector(connection)
+    return connection
 
 
 def require_api_key(function):
@@ -181,6 +184,15 @@ def insert_blockers(cursor, version_id, blockers):
         )
 
 
+def insert_embedding(cursor, version_id, embedding):
+    if not embedding:
+        return
+    cursor.execute(
+        "INSERT INTO embeddings (planning_version_id, embedding) VALUES (%s, %s)",
+        (version_id, embedding),
+    )
+
+
 def assign_missing_external_ids(items, prefix, known_ids=()):
     next_number = 0
     candidates = [item.get("external_id") for item in items if item.get("external_id")]
@@ -318,6 +330,7 @@ def create_planning():
             insert_milestones(cursor, version_id, normalized_milestones)
             insert_activities(cursor, version_id, normalized_activities)
             insert_blockers(cursor, version_id, normalized_blockers)
+            insert_embedding(cursor, version_id, payload.get("embedding"))
 
     return jsonify({"planning_id": planning_id, "version_number": 1}), 201
 
@@ -328,6 +341,8 @@ def list_plannings():
     company = request.args.get("company")
     project = request.args.get("project")
     status = request.args.get("status")
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
     limit = min(request.args.get("limit", default=50, type=int), 200)
     offset = request.args.get("offset", default=0, type=int)
 
@@ -342,6 +357,12 @@ def list_plannings():
     if status:
         clauses.append("pl.status = %s")
         parameters.append(status)
+    if date_from:
+        clauses.append("pl.created_at >= %s")
+        parameters.append(date_from)
+    if date_to:
+        clauses.append("pl.created_at <= %s")
+        parameters.append(date_to)
 
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     parameters.extend([limit, offset])
@@ -362,6 +383,103 @@ def list_plannings():
                 LIMIT %s OFFSET %s
                 """,
                 parameters,
+            )
+            rows = cursor.fetchall()
+    return jsonify(rows)
+
+
+@app.get("/plannings/<planning_id>/similar")
+@require_api_key
+def get_similar_plannings(planning_id):
+    limit = min(request.args.get("limit", default=5, type=int), 50)
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """
+                SELECT e.embedding
+                FROM embeddings e
+                JOIN planning_versions pv ON pv.id = e.planning_version_id
+                JOIN plannings pl ON pl.id = pv.planning_id AND pl.current_version = pv.version_number
+                WHERE pl.id = %s
+                """,
+                (planning_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"error": "Planning not found or has no embedding"}), 404
+
+            cursor.execute(
+                """
+                SELECT
+                    pl.id, pl.title, pl.status, pl.current_version,
+                    pl.created_at, pl.updated_at,
+                    c.name AS company_name, p.name AS project_name,
+                    1 - (e.embedding <=> %s::vector) AS similarity
+                FROM plannings pl
+                JOIN companies c ON c.id = pl.company_id
+                LEFT JOIN projects p ON p.id = pl.project_id
+                JOIN planning_versions pv ON pv.id = (
+                    SELECT id FROM planning_versions
+                    WHERE planning_id = pl.id AND version_number = pl.current_version
+                )
+                JOIN embeddings e ON e.planning_version_id = pv.id
+                WHERE pl.id != %s
+                ORDER BY e.embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (row["embedding"], planning_id, row["embedding"], limit),
+            )
+            rows = cursor.fetchall()
+    return jsonify(rows)
+
+
+@app.post("/plannings/semantic-search")
+@require_api_key
+def semantic_search_plannings():
+    payload = request.get_json(silent=True) or {}
+    embedding = payload.get("embedding")
+    if not embedding:
+        return jsonify({"error": "Missing required field: embedding"}), 400
+
+    limit = min(int(payload.get("limit", 20)), 100)
+
+    clauses = []
+    parameters = []
+    if payload.get("company"):
+        clauses.append("c.name ILIKE %s")
+        parameters.append(f"%{payload['company']}%")
+    if payload.get("project"):
+        clauses.append("p.name ILIKE %s")
+        parameters.append(f"%{payload['project']}%")
+    if payload.get("status"):
+        clauses.append("pl.status = %s")
+        parameters.append(payload["status"])
+
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                f"""
+                SELECT
+                    pl.id, pl.title, pl.status, pl.current_version,
+                    pl.created_at, pl.updated_at,
+                    c.name AS company_name, p.name AS project_name,
+                    1 - (e.embedding <=> %s::vector) AS similarity
+                FROM plannings pl
+                JOIN companies c ON c.id = pl.company_id
+                LEFT JOIN projects p ON p.id = pl.project_id
+                JOIN planning_versions pv ON pv.id = (
+                    SELECT id FROM planning_versions
+                    WHERE planning_id = pl.id AND version_number = pl.current_version
+                )
+                JOIN embeddings e ON e.planning_version_id = pv.id
+                {where}
+                ORDER BY e.embedding <=> %s::vector
+                LIMIT %s
+                """,
+                [embedding, *parameters, embedding, limit],
             )
             rows = cursor.fetchall()
     return jsonify(rows)
@@ -558,6 +676,7 @@ def create_planning_version(planning_id):
             insert_milestones(cursor, new_version_id, new_milestones)
             insert_activities(cursor, new_version_id, new_activities)
             insert_blockers(cursor, new_version_id, payload["blockers"])
+            insert_embedding(cursor, new_version_id, payload.get("embedding"))
 
             change_summary = {
                 "accepted_unchanged": 0, "edited": 0, "removed": 0, "added": 0, "moved": 0,

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { listPlannings } from "@/lib/planner-api/client";
+import { listPlannings, semanticSearchPlannings, type PlanningSummary } from "@/lib/planner-api/client";
+import { createEmbedding } from "@/lib/embeddings/openai";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,27 @@ const STATUS_LABELS: Record<string, string> = {
   archived: "Arquivado",
 };
 
-export default async function PlanejamentosPage() {
-  let plannings: Awaited<ReturnType<typeof listPlannings>> = [];
+export default async function PlanejamentosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
+  let plannings: PlanningSummary[] = [];
   let error: string | null = null;
 
   try {
-    plannings = await listPlannings({ limit: 100 });
+    if (q?.trim()) {
+      const embedding = await createEmbedding(q.trim());
+      plannings = embedding
+        ? await semanticSearchPlannings({ embedding, limit: 20 })
+        : [];
+      if (!embedding) {
+        error = "Não foi possível calcular a busca semântica (verifique a configuração do OpenAI).";
+      }
+    } else {
+      plannings = await listPlannings({ limit: 100 });
+    }
   } catch (err) {
     error = err instanceof Error ? err.message : "Falha ao carregar planejamentos.";
   }
@@ -36,6 +52,30 @@ export default async function PlanejamentosPage() {
         </Link>
       </header>
 
+      <form className="flex gap-2">
+        <input
+          type="text"
+          name="q"
+          defaultValue={q}
+          placeholder="Pesquisar em linguagem natural (ex: soluções de IA com processamento documental)"
+          className="w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+        />
+        <button
+          type="submit"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+        >
+          Pesquisar
+        </button>
+        {q && (
+          <Link
+            href="/planejamentos"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          >
+            Limpar
+          </Link>
+        )}
+      </form>
+
       {error && (
         <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
           {error}
@@ -43,7 +83,9 @@ export default async function PlanejamentosPage() {
       )}
 
       {!error && plannings.length === 0 && (
-        <p className="text-sm text-gray-500">Nenhum planejamento salvo ainda.</p>
+        <p className="text-sm text-gray-500">
+          {q ? "Nenhum planejamento semelhante encontrado." : "Nenhum planejamento salvo ainda."}
+        </p>
       )}
 
       {plannings.length > 0 && (
@@ -63,9 +105,16 @@ export default async function PlanejamentosPage() {
                     {new Date(planning.created_at).toLocaleString("pt-BR")}
                   </p>
                 </div>
-                <span className="rounded-full border border-gray-300 px-2 py-0.5 text-xs dark:border-gray-700">
-                  {STATUS_LABELS[planning.status] ?? planning.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  {planning.similarity !== undefined && (
+                    <span className="text-xs text-gray-500">
+                      {Math.round(planning.similarity * 100)}% semelhante
+                    </span>
+                  )}
+                  <span className="rounded-full border border-gray-300 px-2 py-0.5 text-xs dark:border-gray-700">
+                    {STATUS_LABELS[planning.status] ?? planning.status}
+                  </span>
+                </div>
               </Link>
             </li>
           ))}
