@@ -7,7 +7,7 @@ import type {
   CreateVersionInput,
   PlanningDetail,
 } from "@/lib/planner-api/client";
-import { clearDraft, readDraft, useDraftPersistence } from "@/lib/form-draft";
+import { clearDraft, useDraftHydration, useDraftPersistence } from "@/lib/form-draft";
 
 type EditableMilestone = {
   clientKey: string;
@@ -102,29 +102,30 @@ function swap<T>(items: T[], index: number, direction: -1 | 1): T[] {
 export function PlanEditor({ planningId, detail }: { planningId: string; detail: PlanningDetail }) {
   const router = useRouter();
   const draftKey = `planner:draft:edit:${planningId}`;
-  const [draft] = useState(() => readDraft<PlanEditorDraft>(draftKey));
 
-  const [milestones, setMilestones] = useState<EditableMilestone[]>(
-    () => draft?.milestones ?? toEditableMilestones(detail)
-  );
-  const [activities, setActivities] = useState<EditableActivity[]>(
-    () => draft?.activities ?? toEditableActivities(detail)
-  );
-  const [evaluate, setEvaluate] = useState(() => draft?.evaluate ?? false);
-  const [scores, setScores] = useState(
-    () =>
-      draft?.scores ?? {
-        utility_score: 3,
-        coverage_score: 3,
-        sequence_quality_score: 3,
-        detail_level_score: 3,
-        objective_adherence_score: 3,
-      }
-  );
-  const [evaluationNotes, setEvaluationNotes] = useState(() => draft?.evaluationNotes ?? "");
-  const [versionNotes, setVersionNotes] = useState(() => draft?.versionNotes ?? "");
+  const [milestones, setMilestones] = useState<EditableMilestone[]>(() => toEditableMilestones(detail));
+  const [activities, setActivities] = useState<EditableActivity[]>(() => toEditableActivities(detail));
+  const [evaluate, setEvaluate] = useState(false);
+  const [scores, setScores] = useState({
+    utility_score: 3,
+    coverage_score: 3,
+    sequence_quality_score: 3,
+    detail_level_score: 3,
+    objective_adherence_score: 3,
+  });
+  const [evaluationNotes, setEvaluationNotes] = useState("");
+  const [versionNotes, setVersionNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useDraftHydration<PlanEditorDraft>(draftKey, (draft) => {
+    setMilestones(draft.milestones);
+    setActivities(draft.activities);
+    setEvaluate(draft.evaluate);
+    setScores(draft.scores);
+    setEvaluationNotes(draft.evaluationNotes);
+    setVersionNotes(draft.versionNotes);
+  });
 
   useDraftPersistence<PlanEditorDraft>(draftKey, {
     milestones,

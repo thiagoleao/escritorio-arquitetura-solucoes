@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchitecturePlan } from "@/lib/schema";
 import { formatPlanAsText } from "@/lib/format-plan";
 import { PlanResult } from "@/components/PlanResult";
-import { clearDraft, readDraft, useDraftPersistence } from "@/lib/form-draft";
+import { clearDraft, useDraftHydration, useDraftPersistence } from "@/lib/form-draft";
 
 const ACCEPTED_EXTENSIONS = ".pdf,.txt,.md,.docx";
 const DRAFT_KEY = "planner:draft:new";
@@ -37,8 +37,8 @@ interface GenerateResponse extends ArchitecturePlan {
   references_used?: ReferenceUsed[];
 }
 
-function useAutocomplete(fetchUrl: (query: string) => string | null, initialQuery = "") {
-  const [query, setQuery] = useState(initialQuery);
+function useAutocomplete(fetchUrl: (query: string) => string | null) {
+  const [query, setQuery] = useState("");
   const [options, setOptions] = useState<NamedOption[]>([]);
 
   useEffect(() => {
@@ -70,24 +70,30 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [draft] = useState(() => readDraft<NewPlanDraft>(DRAFT_KEY));
   const [formText, setFormText] = useState({
-    context: draft?.context ?? "",
-    objective: draft?.objective ?? "",
-    deliverables: draft?.deliverables ?? "",
-    constraints: draft?.constraints ?? "",
+    context: "",
+    objective: "",
+    deliverables: "",
+    constraints: "",
   });
 
-  const company = useAutocomplete(
-    (query) => (query.trim() ? `/api/companies?q=${encodeURIComponent(query)}` : null),
-    draft?.company ?? ""
-  );
+  const company = useAutocomplete((query) => (query.trim() ? `/api/companies?q=${encodeURIComponent(query)}` : null));
   const matchedCompany = company.options.find((option) => option.name === company.query) ?? null;
 
-  const project = useAutocomplete(
-    (query) => (matchedCompany ? `/api/projects?company_id=${matchedCompany.id}&q=${encodeURIComponent(query)}` : null),
-    draft?.project ?? ""
+  const project = useAutocomplete((query) =>
+    matchedCompany ? `/api/projects?company_id=${matchedCompany.id}&q=${encodeURIComponent(query)}` : null
   );
+
+  useDraftHydration<NewPlanDraft>(DRAFT_KEY, (draft) => {
+    company.setQuery(draft.company);
+    project.setQuery(draft.project);
+    setFormText({
+      context: draft.context,
+      objective: draft.objective,
+      deliverables: draft.deliverables,
+      constraints: draft.constraints,
+    });
+  });
 
   useDraftPersistence<NewPlanDraft>(DRAFT_KEY, {
     company: company.query,

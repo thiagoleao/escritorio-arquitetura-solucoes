@@ -2,6 +2,16 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import type { BoardEntry, ExecutionStatus } from "@/lib/planner-api/client";
 
 const COLUMNS: Array<{ key: ExecutionStatus; label: string }> = [
@@ -17,6 +27,10 @@ interface CardData {
   externalId: string;
   title: string;
   status: ExecutionStatus;
+}
+
+function cardKey(card: CardData): string {
+  return `${card.planningId}:${card.externalId}`;
 }
 
 function toCards(board: BoardEntry[]): CardData[] {
@@ -41,16 +55,15 @@ export function BoardColumns({ board }: { board: BoardEntry[] }) {
   const [cards, setCards] = useState<CardData[]>(() => toCards(board));
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor)
+  );
+
   async function changeStatus(card: CardData, status: ExecutionStatus) {
-    const key = `${card.planningId}:${card.externalId}`;
+    const key = cardKey(card);
     setPendingKey(key);
-    setCards((prev) =>
-      prev.map((entry) =>
-        entry.planningId === card.planningId && entry.externalId === card.externalId
-          ? { ...entry, status }
-          : entry
-      )
-    );
+    setCards((prev) => prev.map((entry) => (cardKey(entry) === key ? { ...entry, status } : entry)));
 
     try {
       const response = await fetch(
@@ -71,59 +84,92 @@ export function BoardColumns({ board }: { board: BoardEntry[] }) {
     }
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+    const targetStatus = over.id as ExecutionStatus;
+    const card = cards.find((entry) => cardKey(entry) === active.id);
+    if (!card || card.status === targetStatus) return;
+    changeStatus(card, targetStatus);
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      {COLUMNS.map((column) => (
-        <div
-          key={column.key}
-          className="flex flex-col gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-800"
-        >
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-            {column.label}
-          </h2>
-          <ul className="flex flex-col gap-2">
-            {cards
-              .filter((card) => card.status === column.key)
-              .map((card) => {
-                const key = `${card.planningId}:${card.externalId}`;
-                return (
-                  <li
-                    key={key}
-                    className="rounded-md border border-gray-200 p-2 text-sm dark:border-gray-800"
-                  >
-                    <p className="text-xs text-gray-500">
-                      {card.company}
-                      {card.project ? ` — ${card.project}` : ""}
-                    </p>
-                    <p className="font-medium">{card.title}</p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {COLUMNS.map((target) => (
-                        <button
-                          key={target.key}
-                          type="button"
-                          disabled={target.key === card.status || pendingKey === key}
-                          onClick={() => changeStatus(card, target.key)}
-                          className="rounded-md border border-gray-300 px-2 py-0.5 text-xs disabled:opacity-30 dark:border-gray-700"
-                        >
-                          {target.label}
-                        </button>
-                      ))}
-                    </div>
-                    <Link
-                      href={`/planejamentos/${card.planningId}`}
-                      className="mt-1 block text-xs text-gray-400 underline"
-                    >
-                      ver planejamento
-                    </Link>
-                  </li>
-                );
-              })}
-            {cards.filter((card) => card.status === column.key).length === 0 && (
-              <li className="text-xs text-gray-400">Nenhuma atividade.</li>
-            )}
-          </ul>
-        </div>
-      ))}
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {COLUMNS.map((column) => {
+          const columnCards = cards.filter((card) => card.status === column.key);
+          return (
+            <DroppableColumn key={column.key} columnKey={column.key} label={column.label}>
+              {columnCards.map((card) => (
+                <DraggableCard key={cardKey(card)} card={card} pending={pendingKey === cardKey(card)} />
+              ))}
+              {columnCards.length === 0 && <li className="text-xs text-gray-400">Nenhuma atividade.</li>}
+            </DroppableColumn>
+          );
+        })}
+      </div>
+    </DndContext>
+  );
+}
+
+function DroppableColumn({
+  columnKey,
+  label,
+  children,
+}: {
+  columnKey: ExecutionStatus;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: columnKey });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col gap-3 rounded-md border p-3 transition-colors ${
+        isOver
+          ? "border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-950/40"
+          : "border-gray-200 dark:border-gray-800"
+      }`}
+    >
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{label}</h2>
+      <ul className="flex flex-col gap-2">{children}</ul>
     </div>
+  );
+}
+
+function DraggableCard({ card, pending }: { card: CardData; pending: boolean }) {
+  const key = cardKey(card);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: key });
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        opacity: isDragging ? 0.4 : pending ? 0.6 : 1,
+        zIndex: isDragging ? 10 : undefined,
+      }}
+      className="relative rounded-md border border-gray-200 p-2 text-sm dark:border-gray-800"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-gray-500">
+          {card.company}
+          {card.project ? ` — ${card.project}` : ""}
+        </p>
+        <button
+          type="button"
+          {...listeners}
+          {...attributes}
+          aria-label="Arrastar para mudar de coluna"
+          className="cursor-grab touch-none rounded px-1 text-gray-400 active:cursor-grabbing"
+        >
+          ⠿
+        </button>
+      </div>
+      <p className="font-medium">{card.title}</p>
+      <Link href={`/planejamentos/${card.planningId}`} className="mt-1 block text-xs text-gray-400 underline">
+        ver planejamento
+      </Link>
+    </li>
   );
 }
