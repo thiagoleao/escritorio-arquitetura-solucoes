@@ -3,6 +3,6 @@ node_modules
 .git
 .env*
 !.env.example
-ADR - ESCRITÓRIO DE ARQUITETURA SOLUÇÕES
+docs
 .claude
 *.docx

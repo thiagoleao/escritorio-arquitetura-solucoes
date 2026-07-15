@@ -1,8 +1,6 @@
 # Planejador de Soluções de Arquitetura
 
-Aplicação web stateless que gera um roadmap estruturado (marcos, atividades, dependências, bloqueios e informações ausentes) a partir do contexto de uma demanda de arquitetura, conforme [ADR-001](<./ADR - ESCRITÓRIO DE ARQUITETURA SOLUÇÕES/ADR 001.docx>).
-
-Sem banco de dados, sem autenticação, execução síncrona. O usuário copia o resultado manualmente para o Trello.
+Aplicação web que gera um roadmap estruturado (marcos, atividades, dependências, bloqueios e informações ausentes) a partir do contexto de uma demanda de arquitetura, com histórico, versionamento e aprendizado por recuperação — ver [`docs/adr`](./docs/adr) para as decisões de arquitetura ([ADR-001](./docs/adr/ADR-001.md), [ADR-002](./docs/adr/ADR-002.md), [ADR-003](./docs/adr/ADR-003.md)).
 
 ## Rodando localmente
 
