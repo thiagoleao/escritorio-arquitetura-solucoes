@@ -8,6 +8,8 @@ from flask import Flask, jsonify, request
 from pgvector.psycopg2 import register_vector
 from psycopg2.extras import Json, RealDictCursor
 
+from registry import resolve_company, resolve_project
+
 app = Flask(__name__)
 
 INSTANCE_CONNECTION_NAME = os.environ["INSTANCE_CONNECTION_NAME"]
@@ -114,6 +116,45 @@ def list_projects():
             )
             rows = cursor.fetchall()
     return jsonify(rows)
+
+
+@app.post("/companies/resolve")
+@require_api_key
+def resolve_company_endpoint():
+    # Registro Service (ADR-0020): via única de escrita de empresa. Sem create, faz apenas
+    # lookup por nome normalizado e devolve similares (dedup soft). Com create=True, cria.
+    payload = request.get_json(silent=True) or {}
+    name = payload.get("name")
+    if not name or not name.strip():
+        return jsonify({"error": "Missing required field: name"}), 400
+    create = bool(payload.get("create", False))
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            company_id, status, suggestions = resolve_company(cursor, name, create=create)
+    return (
+        jsonify({"id": company_id, "status": status, "suggestions": suggestions}),
+        201 if status == "created" else 200,
+    )
+
+
+@app.post("/projects/resolve")
+@require_api_key
+def resolve_project_endpoint():
+    payload = request.get_json(silent=True) or {}
+    company_id = payload.get("company_id")
+    name = payload.get("name")
+    if not company_id:
+        return jsonify({"error": "Missing required field: company_id"}), 400
+    if not name or not name.strip():
+        return jsonify({"error": "Missing required field: name"}), 400
+    create = bool(payload.get("create", False))
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            project_id, status, suggestions = resolve_project(cursor, company_id, name, create=create)
+    return (
+        jsonify({"id": project_id, "status": status, "suggestions": suggestions}),
+        201 if status == "created" else 200,
+    )
 
 
 @app.post("/auth/login")
@@ -250,33 +291,19 @@ def update_user(user_id):
     return jsonify(user)
 
 
+# Compatibilidade: os handlers do planejador continuam chamando estes nomes; a lógica
+# agora vive no Registro Service (registry.py), via única de escrita (ADR-0020). create=True
+# preserva o comportamento antigo de find-or-create automático.
 def find_or_create_company(cursor, name):
-    cursor.execute("SELECT id FROM companies WHERE name = %s", (name,))
-    row = cursor.fetchone()
-    if row:
-        return row["id"]
-    cursor.execute(
-        "INSERT INTO companies (name) VALUES (%s) RETURNING id",
-        (name,),
-    )
-    return cursor.fetchone()["id"]
+    company_id, _status, _suggestions = resolve_company(cursor, name, create=True)
+    return company_id
 
 
 def find_or_create_project(cursor, company_id, name):
     if not name:
         return None
-    cursor.execute(
-        "SELECT id FROM projects WHERE company_id = %s AND name = %s",
-        (company_id, name),
-    )
-    row = cursor.fetchone()
-    if row:
-        return row["id"]
-    cursor.execute(
-        "INSERT INTO projects (company_id, name) VALUES (%s, %s) RETURNING id",
-        (company_id, name),
-    )
-    return cursor.fetchone()["id"]
+    project_id, _status, _suggestions = resolve_project(cursor, company_id, name, create=True)
+    return project_id
 
 
 def insert_milestones(cursor, version_id, milestones):

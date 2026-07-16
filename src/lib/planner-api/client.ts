@@ -274,6 +274,52 @@ export async function listProjects(companyId: string, query: string = ""): Promi
   return parseJsonOrThrow(response, "listar projetos");
 }
 
+// Registro Service (ADR-0020): via única de escrita de empresas/projetos.
+export type ResolveStatus = "matched" | "absent" | "created" | "empty";
+
+export interface CompanySuggestion {
+  id: string;
+  name: string;
+  score: number;
+}
+
+export interface ResolveCompanyResult {
+  id: string | null;
+  status: ResolveStatus;
+  suggestions: CompanySuggestion[];
+}
+
+export interface ResolveProjectResult {
+  id: string | null;
+  status: ResolveStatus;
+  suggestions: CompanySuggestion[];
+}
+
+/**
+ * Resolve uma empresa pelo nome normalizado. Sem `create`, apenas consulta e devolve
+ * similares (dedup soft) para o chamador confirmar antes de criar. Com `create: true`,
+ * cria caso não exista. Usado na criação inline do timesheet (ADR-0013).
+ */
+export async function resolveCompany(name: string, create = false): Promise<ResolveCompanyResult> {
+  const response = await authenticatedFetch("/companies/resolve", {
+    method: "POST",
+    body: JSON.stringify({ name, create }),
+  });
+  return parseJsonOrThrow(response, "resolver a empresa");
+}
+
+export async function resolveProject(
+  companyId: string,
+  name: string,
+  create = false
+): Promise<ResolveProjectResult> {
+  const response = await authenticatedFetch("/projects/resolve", {
+    method: "POST",
+    body: JSON.stringify({ company_id: companyId, name, create }),
+  });
+  return parseJsonOrThrow(response, "resolver o projeto");
+}
+
 export async function getSimilarPlannings(
   id: string,
   limit: number = 5,
