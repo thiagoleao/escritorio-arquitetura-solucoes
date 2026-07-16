@@ -142,6 +142,7 @@ export async function POST(request: Request) {
       );
     }
     console.error("Falha ao gerar o planejamento", error);
-    return NextResponse.json({ error: "Falha ao gerar o planejamento. Tente novamente." }, { status: 502 });
+    const message = error instanceof Error ? error.message : "Falha ao gerar o planejamento. Tente novamente.";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -128,6 +128,10 @@ export interface BoardActivity {
   external_id: string;
   title: string;
   milestone_external_id: string;
+  description: string;
+  expected_output: string;
+  dependencies: string[];
+  status: "ready" | "blocked";
   execution_status: ExecutionStatus;
 }
 

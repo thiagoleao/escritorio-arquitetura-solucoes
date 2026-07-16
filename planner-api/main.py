@@ -616,6 +616,7 @@ def get_board():
                 cursor.execute(
                     """
                     SELECT a.external_id, a.title, a.milestone_external_id,
+                           a.description, a.expected_output, a.dependencies, a.status,
                            COALESCE(ae.status, 'todo') AS execution_status
                     FROM activities a
                     LEFT JOIN activity_execution ae
