@@ -370,6 +370,26 @@ export async function getBoard(
   return parseJsonOrThrow(response, "buscar o board");
 }
 
+export interface UpdateActivityDetailsInput {
+  title?: string;
+  description?: string;
+  expected_output?: string;
+  dependencies?: string[];
+}
+
+export async function updateActivityDetails(
+  planningId: string,
+  activityExternalId: string,
+  input: UpdateActivityDetailsInput,
+  userId?: string
+): Promise<{ external_id: string; title: string; description: string; expected_output: string; dependencies: string[] }> {
+  const response = await authenticatedFetch(`/plannings/${planningId}/activities/${activityExternalId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ ...input, user_id: userId }),
+  });
+  return parseJsonOrThrow(response, "atualizar os detalhes da atividade");
+}
+
 export async function updateActivityExecutionStatus(
   planningId: string,
   activityExternalId: string,

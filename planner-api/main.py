@@ -645,6 +645,70 @@ def get_board():
     return jsonify(board)
 
 
+@app.patch("/plannings/<planning_id>/activities/<activity_external_id>")
+@require_api_key
+def update_activity_details(planning_id, activity_external_id):
+    payload = request.get_json(silent=True) or {}
+    user_id = payload.get("user_id")
+
+    fields = []
+    values = []
+    if "title" in payload:
+        fields.append("title = %s")
+        values.append(payload["title"])
+    if "description" in payload:
+        fields.append("description = %s")
+        values.append(payload["description"])
+    if "expected_output" in payload:
+        fields.append("expected_output = %s")
+        values.append(payload["expected_output"])
+    if "dependencies" in payload:
+        fields.append("dependencies = %s")
+        values.append(Json(payload["dependencies"]))
+
+    if not fields:
+        return jsonify({"error": "No fields to update"}), 400
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT created_by_user_id FROM plannings WHERE id = %s", (planning_id,))
+            planning = cursor.fetchone()
+            if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
+                return jsonify({"error": "Planning not found"}), 404
+
+            cursor.execute(
+                """
+                SELECT a.external_id
+                FROM activities a
+                JOIN planning_versions pv ON pv.id = a.planning_version_id
+                JOIN plannings pl ON pl.id = pv.planning_id AND pl.current_version = pv.version_number
+                WHERE pl.id = %s AND a.external_id = %s
+                """,
+                (planning_id, activity_external_id),
+            )
+            if not cursor.fetchone():
+                return jsonify({"error": "Activity not found"}), 404
+
+            values.extend([planning_id, activity_external_id])
+            cursor.execute(
+                f"""
+                UPDATE activities a
+                SET {", ".join(fields)}
+                FROM planning_versions pv, plannings pl
+                WHERE pv.id = a.planning_version_id
+                    AND pl.id = pv.planning_id AND pl.current_version = pv.version_number
+                    AND pl.id = %s AND a.external_id = %s
+                RETURNING a.external_id, a.title, a.description, a.expected_output, a.dependencies
+                """,
+                values,
+            )
+            updated = cursor.fetchone()
+
+    return jsonify(updated)
+
+
 @app.patch("/plannings/<planning_id>/activities/<activity_external_id>/status")
 @require_api_key
 def update_activity_execution_status(planning_id, activity_external_id):

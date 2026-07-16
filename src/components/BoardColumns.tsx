@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Info, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -141,6 +141,11 @@ export function BoardColumns({ board }: { board: BoardEntry[] }) {
     changeStatus(card, targetStatus);
   }
 
+  function handleTaskSaved(updated: CardData) {
+    setCards((prev) => prev.map((entry) => (cardKey(entry) === cardKey(updated) ? updated : entry)));
+    setDetailCard(updated);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {progress.length > 0 && (
@@ -192,7 +197,9 @@ export function BoardColumns({ board }: { board: BoardEntry[] }) {
         </DragOverlay>
       </DndContext>
 
-      {detailCard && <TaskDetailModal card={detailCard} onClose={() => setDetailCard(null)} />}
+      {detailCard && (
+        <TaskDetailModal card={detailCard} onClose={() => setDetailCard(null)} onSaved={handleTaskSaved} />
+      )}
     </div>
   );
 }
@@ -236,7 +243,7 @@ function DraggableCard({
       {...listeners}
       {...attributes}
       style={{ opacity: isDragging ? 0.35 : pending ? 0.6 : 1 }}
-      className="cursor-grab touch-none rounded-2xl border border-white/70 bg-white/85 p-2 text-sm shadow-[0_2px_10px_rgba(15,23,42,0.15)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(15,23,42,0.2)] active:cursor-grabbing dark:border-white/15 dark:bg-white/15 dark:shadow-[0_2px_12px_rgba(0,0,0,0.5)] dark:hover:shadow-[0_8px_20px_rgba(0,0,0,0.6)]"
+      className="relative cursor-grab touch-none rounded-2xl border border-white/70 bg-white/85 p-2 pb-9 text-sm shadow-[0_2px_10px_rgba(15,23,42,0.15)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(15,23,42,0.2)] active:cursor-grabbing dark:border-white/15 dark:bg-white/15 dark:shadow-[0_2px_12px_rgba(0,0,0,0.5)] dark:hover:shadow-[0_8px_20px_rgba(0,0,0,0.6)]"
     >
       <CardBody card={card} onOpenDetail={onOpenDetail} />
     </li>
@@ -273,32 +280,97 @@ function CardBody({
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onOpenDetail}
-          className="glass-link mt-1 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+          aria-label="Ver mais detalhes da tarefa"
+          className="glass-pill glass-pill-secondary group absolute bottom-1.5 right-1.5 flex items-center gap-1 px-2 py-1 text-xs"
         >
-          <Info className="h-3.5 w-3.5" />
-          Ver mais
+          <span className="hidden sm:inline">Ver mais</span>
+          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:animate-nudge-right" />
         </button>
       )}
     </div>
   );
 }
 
-function TaskDetailModal({ card, onClose }: { card: CardData; onClose: () => void }) {
+function TaskDetailModal({
+  card,
+  onClose,
+  onSaved,
+}: {
+  card: CardData;
+  onClose: () => void;
+  onSaved: (card: CardData) => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [title, setTitle] = useState(card.title);
+  const [description, setDescription] = useState(card.description);
+  const [expectedOutput, setExpectedOutput] = useState(card.expectedOutput);
+  const [dependencies, setDependencies] = useState(card.dependencies.join(", "));
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function cancelEditing() {
+    setIsEditing(false);
+    setTitle(card.title);
+    setDescription(card.description);
+    setExpectedOutput(card.expectedOutput);
+    setDependencies(card.dependencies.join(", "));
+    setError(null);
+  }
+
+  async function handleSave() {
+    setIsSaving(true);
+    setError(null);
+    const newDependencies = dependencies
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    try {
+      const response = await fetch(`/api/board/activities/${card.planningId}/${card.externalId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          description,
+          expected_output: expectedOutput,
+          dependencies: newDependencies,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Falha ao salvar");
+      }
+      onSaved({ ...card, title, description, expectedOutput, dependencies: newDependencies });
+      setIsEditing(false);
+    } catch {
+      setError("Falha ao salvar as alterações. Tente novamente.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="glass-card flex max-h-[85vh] w-full max-w-lg flex-col gap-4 overflow-y-auto p-6"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-2xl border border-white/70 bg-white/95 p-6 shadow-2xl dark:border-white/15 dark:bg-white/15 dark:shadow-[0_8px_40px_rgba(0,0,0,0.6)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="flex-1">
             <Link href={`/planejamentos/${card.planningId}`} className="glass-link text-xs font-semibold text-gray-500 dark:text-gray-400">
               {card.projectCode}
             </Link>
-            <h2 className="mt-1 text-lg font-semibold">{card.title}</h2>
+            {isEditing ? (
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                className="glass-input mt-1 w-full text-base font-semibold"
+              />
+            ) : (
+              <h2 className="mt-1 text-lg font-semibold">{card.title}</h2>
+            )}
           </div>
           <button
             type="button"
@@ -330,24 +402,84 @@ function TaskDetailModal({ card, onClose }: { card: CardData; onClose: () => voi
 
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Descrição</h3>
-          <p className="mt-1 text-sm">{card.description}</p>
+          {isEditing ? (
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
+              className="glass-input mt-1 w-full text-sm"
+            />
+          ) : (
+            <p className="mt-1 text-sm">{card.description}</p>
+          )}
         </div>
 
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Resultado esperado
           </h3>
-          <p className="mt-1 text-sm">{card.expectedOutput}</p>
+          {isEditing ? (
+            <textarea
+              value={expectedOutput}
+              onChange={(event) => setExpectedOutput(event.target.value)}
+              rows={2}
+              className="glass-input mt-1 w-full text-sm"
+            />
+          ) : (
+            <p className="mt-1 text-sm">{card.expectedOutput}</p>
+          )}
         </div>
 
-        {card.dependencies.length > 0 && (
+        {(isEditing || card.dependencies.length > 0) && (
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               Dependências
             </h3>
-            <p className="mt-1 text-sm">{card.dependencies.join(", ")}</p>
+            {isEditing ? (
+              <input
+                value={dependencies}
+                onChange={(event) => setDependencies(event.target.value)}
+                placeholder="Separadas por vírgula"
+                className="glass-input mt-1 w-full text-sm"
+              />
+            ) : (
+              <p className="mt-1 text-sm">{card.dependencies.join(", ")}</p>
+            )}
           </div>
         )}
+
+        {error && <p className="glass-alert-error">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                onClick={cancelEditing}
+                disabled={isSaving}
+                className="glass-pill glass-pill-secondary glass-pill-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                className="glass-pill glass-pill-primary glass-pill-sm"
+              >
+                {isSaving ? "Salvando..." : "Salvar"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="glass-pill glass-pill-secondary glass-pill-sm"
+            >
+              Editar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
