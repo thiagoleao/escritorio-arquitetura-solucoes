@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MoreVertical } from "lucide-react";
 import type { AdminUser, UserRole } from "@/lib/planner-api/client";
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -16,6 +17,7 @@ interface NewUserForm {
 }
 
 const EMPTY_FORM: NewUserForm = { name: "", email: "", password: "", role: "member" };
+const PAGE_SIZE = 10;
 
 export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
   const [users, setUsers] = useState<AdminUser[]>(initialUsers);
@@ -24,6 +26,18 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const filteredUsers = users.filter((user) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedUsers = filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -71,6 +85,12 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
     await patchUser(id, { password: newPassword });
     setResetPasswordId(null);
     setNewPassword("");
+  }
+
+  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearch(searchInput);
+    setPage(1);
   }
 
   return (
@@ -123,6 +143,19 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
         </button>
       </form>
 
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="Pesquisar por nome ou e-mail"
+          className="glass-input w-full max-w-sm"
+        />
+        <button type="submit" className="glass-pill glass-pill-secondary">
+          Pesquisar
+        </button>
+      </form>
+
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-white/40 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
@@ -134,7 +167,7 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => (
+          {pagedUsers.map((user) => (
             <tr key={user.id} className="border-b border-white/30 dark:border-white/5">
               <td className="py-2">{user.name}</td>
               <td className="py-2">{user.email}</td>
@@ -149,13 +182,15 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                 </select>
               </td>
               <td className="py-2">
-                <button
-                  type="button"
-                  onClick={() => patchUser(user.id, { is_active: !user.is_active })}
-                  className="rounded-full border border-white/60 bg-white/40 px-2 py-0.5 text-xs transition-all hover:scale-[1.02] dark:border-white/10 dark:bg-white/10"
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs backdrop-blur-md ${
+                    user.is_active
+                      ? "border-green-300/60 bg-green-100/70 text-green-700 dark:border-green-800/50 dark:bg-green-950/50 dark:text-green-300"
+                      : "border-white/60 bg-white/40 dark:border-white/10 dark:bg-white/10"
+                  }`}
                 >
                   {user.is_active ? "Ativo" : "Inativo"}
-                </button>
+                </span>
               </td>
               <td className="py-2">
                 {resetPasswordId === user.id ? (
@@ -186,19 +221,106 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setResetPasswordId(user.id)}
-                    className="glass-pill glass-pill-secondary glass-pill-sm"
-                  >
-                    Redefinir senha
-                  </button>
+                  <ActionsMenu
+                    isActive={user.is_active}
+                    onResetPassword={() => setResetPasswordId(user.id)}
+                    onToggleActive={() => patchUser(user.id, { is_active: !user.is_active })}
+                  />
                 )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {filteredUsers.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum usuário encontrado.</p>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setPage(currentPage - 1)}
+            className="glass-pill glass-pill-secondary glass-pill-sm disabled:opacity-30"
+          >
+            Anterior
+          </button>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Página {currentPage} de {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => setPage(currentPage + 1)}
+            className="glass-pill glass-pill-secondary glass-pill-sm disabled:opacity-30"
+          >
+            Próxima
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionsMenu({
+  isActive,
+  onResetPassword,
+  onToggleActive,
+}: {
+  isActive: boolean;
+  onResetPassword: () => void;
+  onToggleActive: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label="Mais ações"
+        className="glass-pill glass-pill-secondary glass-pill-sm px-2"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="glass-card absolute right-0 z-10 mt-1 flex w-40 flex-col gap-1 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              onResetPassword();
+              setOpen(false);
+            }}
+            className="rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/60 dark:hover:bg-white/10"
+          >
+            Redefinir senha
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onToggleActive();
+              setOpen(false);
+            }}
+            className="rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/60 dark:hover:bg-white/10"
+          >
+            {isActive ? "Inativar" : "Ativar"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

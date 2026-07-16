@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { auth } from "@/auth";
 import { listPlannings, semanticSearchPlannings, type PlanningSummary } from "@/lib/planner-api/client";
 import { createEmbedding } from "@/lib/embeddings/openai";
 
@@ -18,6 +19,7 @@ export default async function PlanejamentosPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
+  const session = await auth();
   let plannings: PlanningSummary[] = [];
   let error: string | null = null;
 
@@ -25,13 +27,13 @@ export default async function PlanejamentosPage({
     if (q?.trim()) {
       const embedding = await createEmbedding(q.trim());
       plannings = embedding
-        ? await semanticSearchPlannings({ embedding, limit: 20 })
+        ? await semanticSearchPlannings({ embedding, limit: 20, scopeUserId: session?.user?.id })
         : [];
       if (!embedding) {
         error = "Não foi possível calcular a busca semântica (verifique a configuração do OpenAI).";
       }
     } else {
-      plannings = await listPlannings({ limit: 100 });
+      plannings = await listPlannings({ limit: 100 }, session?.user?.id);
     }
   } catch (err) {
     error = err instanceof Error ? err.message : "Falha ao carregar planejamentos.";
@@ -39,19 +41,9 @@ export default async function PlanejamentosPage({
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 px-6 py-10">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Planejamentos</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Histórico de planejamentos gerados.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/quadro" className="glass-pill glass-pill-secondary glass-pill-sm">
-            Quadro
-          </Link>
-          <Link href="/" className="glass-pill glass-pill-secondary glass-pill-sm">
-            Novo planejamento
-          </Link>
-        </div>
+      <header>
+        <h1 className="text-2xl font-semibold">Planejamentos</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Histórico de planejamentos gerados.</p>
       </header>
 
       <form className="flex gap-2">
@@ -103,7 +95,13 @@ export default async function PlanejamentosPage({
                       {Math.round(planning.similarity * 100)}% semelhante
                     </span>
                   )}
-                  <span className="rounded-full border border-white/60 bg-white/40 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-white/10">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-xs backdrop-blur-md ${
+                      planning.status === "approved"
+                        ? "border-green-300/60 bg-green-100/70 text-green-700 dark:border-green-800/50 dark:bg-green-950/50 dark:text-green-300"
+                        : "border-white/60 bg-white/40 dark:border-white/10 dark:bg-white/10"
+                    }`}
+                  >
                     {STATUS_LABELS[planning.status] ?? planning.status}
                   </span>
                 </div>

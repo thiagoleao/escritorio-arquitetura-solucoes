@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
@@ -38,10 +39,18 @@ function LoginForm() {
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-6 py-10">
       <div className="glass-card flex flex-col gap-6 p-8">
+        <Image
+          src="/images/logo.png"
+          alt="Escritório de Soluções"
+          width={480}
+          height={270}
+          className="mx-auto h-auto w-64"
+          priority
+        />
         <div>
           <h1 className="text-2xl font-semibold">Entrar</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Acesse o Planejador de Soluções de Arquitetura.
+            Acesse o Escritório de Soluções de Arquitetura.
           </p>
         </div>
 

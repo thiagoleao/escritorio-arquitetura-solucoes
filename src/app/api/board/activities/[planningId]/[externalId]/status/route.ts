@@ -23,7 +23,8 @@ export async function PATCH(
       planningId,
       externalId,
       body.status as ExecutionStatus,
-      session?.user?.email ?? undefined
+      session?.user?.email ?? undefined,
+      session?.user?.id
     );
     return NextResponse.json(result);
   } catch (error) {

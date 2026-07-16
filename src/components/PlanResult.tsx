@@ -34,7 +34,7 @@ export function PlanResult({
       <Section title="Marcos">
         <ul className="flex flex-col gap-3">
           {plan.milestones.map((milestone) => (
-            <li key={milestone.id} className="rounded-2xl border border-white/50 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
+            <li key={milestone.id} className="glass-item">
               <p className="text-sm font-medium">
                 {milestone.id} — {milestone.title}
               </p>
@@ -48,16 +48,16 @@ export function PlanResult({
       <Section title="Atividades">
         <ul className="flex flex-col gap-3">
           {plan.activities.map((activity) => (
-            <li key={activity.id} className="rounded-2xl border border-white/50 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
+            <li key={activity.id} className="glass-item">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-medium">
                   {activity.id} — {activity.title}
                 </p>
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
+                  className={`rounded-full border px-2 py-0.5 text-xs backdrop-blur-md ${
                     activity.status === "blocked"
-                      ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
-                      : "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+                      ? "border-red-300/60 bg-red-100/70 text-red-700 dark:border-red-800/50 dark:bg-red-950/50 dark:text-red-300"
+                      : "border-green-300/60 bg-green-100/70 text-green-700 dark:border-green-800/50 dark:bg-green-950/50 dark:text-green-300"
                   }`}
                 >
                   {activity.status === "blocked" ? "bloqueada" : "pronta"}

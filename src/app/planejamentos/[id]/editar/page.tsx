@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getPlanning } from "@/lib/planner-api/client";
 import { PlanEditor } from "@/components/PlanEditor";
 
@@ -11,10 +12,11 @@ export default async function EditarPlanejamentoPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const session = await auth();
 
   let detail;
   try {
-    detail = await getPlanning(id);
+    detail = await getPlanning(id, session?.user?.id);
   } catch {
     notFound();
   }
@@ -27,14 +29,11 @@ export default async function EditarPlanejamentoPage({
             Editar — {detail.planning.company_name}
             {detail.planning.project_name ? ` — ${detail.planning.project_name}` : ""}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Editando a partir da versão {detail.version.version_number}. Salvar cria uma nova versão.
           </p>
         </div>
-        <Link
-          href={`/planejamentos/${id}`}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-        >
+        <Link href={`/planejamentos/${id}`} className="glass-pill glass-pill-secondary glass-pill-sm">
           Cancelar
         </Link>
       </header>

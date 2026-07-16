@@ -135,6 +135,7 @@ export interface BoardEntry {
   planning_id: string;
   company_name: string;
   project_name: string | null;
+  project_code: string;
   completion_percentage: number;
   activities: BoardActivity[];
 }
@@ -192,57 +193,71 @@ async function parseJsonOrThrow<T>(response: Response, action: string): Promise<
   return response.json() as Promise<T>;
 }
 
-export async function createPlanning(input: CreatePlanningInput): Promise<{ planning_id: string; version_number: number }> {
+export async function createPlanning(
+  input: CreatePlanningInput,
+  userId?: string
+): Promise<{ planning_id: string; version_number: number }> {
   const response = await authenticatedFetch("/plannings", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, created_by_user_id: userId }),
   });
   return parseJsonOrThrow(response, "salvar o planejamento");
 }
 
-export async function listPlannings(filters: {
-  company?: string;
-  project?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<PlanningSummary[]> {
+export async function listPlannings(
+  filters: {
+    company?: string;
+    project?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+  userId?: string
+): Promise<PlanningSummary[]> {
   const params = new URLSearchParams();
   if (filters.company) params.set("company", filters.company);
   if (filters.project) params.set("project", filters.project);
   if (filters.status) params.set("status", filters.status);
   if (filters.limit) params.set("limit", String(filters.limit));
   if (filters.offset) params.set("offset", String(filters.offset));
+  if (userId) params.set("user_id", userId);
 
   const response = await authenticatedFetch(`/plannings?${params.toString()}`);
   return parseJsonOrThrow(response, "listar planejamentos");
 }
 
-export async function getPlanning(id: string): Promise<PlanningDetail> {
-  const response = await authenticatedFetch(`/plannings/${id}`);
+export async function getPlanning(id: string, userId?: string): Promise<PlanningDetail> {
+  const params = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  const response = await authenticatedFetch(`/plannings/${id}${params}`);
   return parseJsonOrThrow(response, "buscar o planejamento");
 }
 
-export async function updatePlanningStatus(id: string, status: string): Promise<{ planning_id: string; status: string }> {
+export async function updatePlanningStatus(
+  id: string,
+  status: string,
+  userId?: string
+): Promise<{ planning_id: string; status: string }> {
   const response = await authenticatedFetch(`/plannings/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, user_id: userId }),
   });
   return parseJsonOrThrow(response, "atualizar o status do planejamento");
 }
 
-export async function listPlanningVersions(id: string): Promise<PlanningVersionSummary[]> {
-  const response = await authenticatedFetch(`/plannings/${id}/versions`);
+export async function listPlanningVersions(id: string, userId?: string): Promise<PlanningVersionSummary[]> {
+  const params = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  const response = await authenticatedFetch(`/plannings/${id}/versions${params}`);
   return parseJsonOrThrow(response, "listar versões do planejamento");
 }
 
 export async function createPlanningVersion(
   id: string,
-  input: CreateVersionInput
+  input: CreateVersionInput,
+  userId?: string
 ): Promise<{ planning_id: string; version_number: number; change_summary: ChangeSummary }> {
   const response = await authenticatedFetch(`/plannings/${id}/versions`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, user_id: userId }),
   });
   return parseJsonOrThrow(response, "salvar a nova versão do planejamento");
 }
@@ -259,8 +274,14 @@ export async function listProjects(companyId: string, query: string = ""): Promi
   return parseJsonOrThrow(response, "listar projetos");
 }
 
-export async function getSimilarPlannings(id: string, limit: number = 5): Promise<PlanningSummary[]> {
-  const response = await authenticatedFetch(`/plannings/${id}/similar?limit=${limit}`);
+export async function getSimilarPlannings(
+  id: string,
+  limit: number = 5,
+  userId?: string
+): Promise<PlanningSummary[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (userId) params.set("user_id", userId);
+  const response = await authenticatedFetch(`/plannings/${id}/similar?${params.toString()}`);
   return parseJsonOrThrow(response, "buscar planejamentos semelhantes");
 }
 
@@ -270,18 +291,30 @@ export async function semanticSearchPlannings(input: {
   project?: string;
   status?: string;
   limit?: number;
+  /**
+   * Omit entirely for internal reference-case retrieval during plan
+   * generation (searches across all users' approved plannings — the shared
+   * "intelligence"). Pass the current user's id for the user-facing search
+   * in /planejamentos, which must respect ownership.
+   */
+  scopeUserId?: string;
 }): Promise<PlanningSummary[]> {
+  const { scopeUserId, ...rest } = input;
   const response = await authenticatedFetch("/plannings/semantic-search", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...rest, scope_user_id: scopeUserId }),
   });
   return parseJsonOrThrow(response, "buscar planejamentos por similaridade");
 }
 
-export async function getBoard(filters: { company?: string; status?: string } = {}): Promise<BoardEntry[]> {
+export async function getBoard(
+  filters: { company?: string; status?: string } = {},
+  userId?: string
+): Promise<BoardEntry[]> {
   const params = new URLSearchParams();
   if (filters.company) params.set("company", filters.company);
   if (filters.status) params.set("status", filters.status);
+  if (userId) params.set("user_id", userId);
 
   const response = await authenticatedFetch(`/board?${params.toString()}`);
   return parseJsonOrThrow(response, "buscar o board");
@@ -291,13 +324,14 @@ export async function updateActivityExecutionStatus(
   planningId: string,
   activityExternalId: string,
   status: ExecutionStatus,
-  changedBy?: string
+  changedBy?: string,
+  userId?: string
 ): Promise<{ planning_id: string; activity_external_id: string; status: ExecutionStatus }> {
   const response = await authenticatedFetch(
     `/plannings/${planningId}/activities/${activityExternalId}/status`,
     {
       method: "PATCH",
-      body: JSON.stringify({ status, changed_by: changedBy }),
+      body: JSON.stringify({ status, changed_by: changedBy, user_id: userId }),
     }
   );
   return parseJsonOrThrow(response, "atualizar o status de execução da atividade");

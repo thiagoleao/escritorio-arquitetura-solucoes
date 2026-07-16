@@ -49,6 +49,18 @@ def require_api_key(function):
     return decorated
 
 
+def is_admin_user(cursor, user_id):
+    if not user_id:
+        return False
+    cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+    row = cursor.fetchone()
+    return bool(row and row["role"] == "admin")
+
+
+def owns_planning(planning, user_id):
+    return user_id is not None and str(planning.get("created_by_user_id")) == str(user_id)
+
+
 @app.get("/health")
 def health():
     try:
@@ -433,8 +445,8 @@ def create_planning():
             cursor.execute(
                 """
                 INSERT INTO plannings (
-                    company_id, project_id, context, objective, deliverables, constraints
-                ) VALUES (%s, %s, %s, %s, %s, %s)
+                    company_id, project_id, context, objective, deliverables, constraints, created_by_user_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
@@ -444,6 +456,7 @@ def create_planning():
                     payload["objective"],
                     payload["deliverables"],
                     payload.get("constraints"),
+                    payload.get("created_by_user_id"),
                 ),
             )
             planning_id = cursor.fetchone()["id"]
@@ -480,6 +493,7 @@ def list_plannings():
     status = request.args.get("status")
     date_from = request.args.get("date_from")
     date_to = request.args.get("date_to")
+    user_id = request.args.get("user_id")
     limit = min(request.args.get("limit", default=50, type=int), 200)
     offset = request.args.get("offset", default=0, type=int)
 
@@ -501,11 +515,15 @@ def list_plannings():
         clauses.append("pl.created_at <= %s")
         parameters.append(date_to)
 
-    where = "WHERE " + " AND ".join(clauses) if clauses else ""
-    parameters.extend([limit, offset])
-
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            if not is_admin_user(cursor, user_id):
+                clauses.append("pl.created_by_user_id = %s")
+                parameters.append(user_id)
+
+            where = "WHERE " + " AND ".join(clauses) if clauses else ""
+            parameters.extend([limit, offset])
+
             cursor.execute(
                 f"""
                 SELECT
@@ -530,20 +548,28 @@ def list_plannings():
 def get_board():
     company = request.args.get("company")
     status = request.args.get("status", "approved")
+    user_id = request.args.get("user_id")
 
     clauses = ["pl.status = %s"]
     parameters = [status]
     if company:
         clauses.append("c.name ILIKE %s")
         parameters.append(f"%{company}%")
-    where = "WHERE " + " AND ".join(clauses)
 
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            if not is_admin_user(cursor, user_id):
+                clauses.append("pl.created_by_user_id = %s")
+                parameters.append(user_id)
+            where = "WHERE " + " AND ".join(clauses)
+
             cursor.execute(
                 f"""
                 SELECT pl.id AS planning_id, c.name AS company_name, p.name AS project_name,
-                       pv.id AS version_id
+                       pv.id AS version_id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY pl.company_id ORDER BY pl.created_at, pl.id
+                       ) AS company_sequence
                 FROM plannings pl
                 JOIN companies c ON c.id = pl.company_id
                 LEFT JOIN projects p ON p.id = pl.project_id
@@ -575,12 +601,15 @@ def get_board():
                 activities = cursor.fetchall()
                 total = len(activities)
                 done = sum(1 for activity in activities if activity["execution_status"] == "done")
-                completion_percentage = round((done / total) * 100) if total else 0
+                doing = sum(1 for activity in activities if activity["execution_status"] == "doing")
+                completion_percentage = round(((done + doing * 0.5) / total) * 100) if total else 0
+                project_code = f"{planning['company_name']} {planning['company_sequence']:03d}"
 
                 board.append({
                     "planning_id": planning["planning_id"],
                     "company_name": planning["company_name"],
                     "project_name": planning["project_name"],
+                    "project_code": project_code,
                     "completion_percentage": completion_percentage,
                     "activities": activities,
                 })
@@ -594,11 +623,19 @@ def update_activity_execution_status(planning_id, activity_external_id):
     payload = request.get_json(silent=True) or {}
     status = payload.get("status")
     changed_by = payload.get("changed_by")
+    user_id = payload.get("user_id")
     if status not in VALID_EXECUTION_STATUSES:
         return jsonify({"error": "Invalid status", "allowed": sorted(VALID_EXECUTION_STATUSES)}), 400
 
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT created_by_user_id FROM plannings WHERE id = %s", (planning_id,))
+            planning = cursor.fetchone()
+            if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
+                return jsonify({"error": "Planning not found"}), 404
+
             cursor.execute(
                 "SELECT status FROM activity_execution WHERE planning_id = %s AND activity_external_id = %s",
                 (planning_id, activity_external_id),
@@ -635,12 +672,15 @@ def update_activity_execution_status(planning_id, activity_external_id):
 @require_api_key
 def get_similar_plannings(planning_id):
     limit = min(request.args.get("limit", default=5, type=int), 50)
+    user_id = request.args.get("user_id")
 
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            admin = is_admin_user(cursor, user_id)
+
             cursor.execute(
                 """
-                SELECT e.embedding
+                SELECT e.embedding, pl.created_by_user_id
                 FROM embeddings e
                 JOIN planning_versions pv ON pv.id = e.planning_version_id
                 JOIN plannings pl ON pl.id = pv.planning_id AND pl.current_version = pv.version_number
@@ -651,9 +691,14 @@ def get_similar_plannings(planning_id):
             row = cursor.fetchone()
             if not row:
                 return jsonify({"error": "Planning not found or has no embedding"}), 404
+            if not admin and not owns_planning(row, user_id):
+                return jsonify({"error": "Planning not found or has no embedding"}), 404
+
+            scope_clause = "" if admin else "AND pl.created_by_user_id = %s"
+            scope_params = () if admin else (user_id,)
 
             cursor.execute(
-                """
+                f"""
                 SELECT
                     pl.id, pl.title, pl.status, pl.current_version,
                     pl.created_at, pl.updated_at,
@@ -667,11 +712,11 @@ def get_similar_plannings(planning_id):
                     WHERE planning_id = pl.id AND version_number = pl.current_version
                 )
                 JOIN embeddings e ON e.planning_version_id = pv.id
-                WHERE pl.id != %s
+                WHERE pl.id != %s {scope_clause}
                 ORDER BY e.embedding <=> %s::vector
                 LIMIT %s
                 """,
-                (row["embedding"], planning_id, row["embedding"], limit),
+                (row["embedding"], planning_id, *scope_params, row["embedding"], limit),
             )
             rows = cursor.fetchall()
     return jsonify(rows)
@@ -686,6 +731,11 @@ def semantic_search_plannings():
         return jsonify({"error": "Missing required field: embedding"}), 400
 
     limit = min(int(payload.get("limit", 20)), 100)
+    # scope_user_id is optional on purpose: omitted entirely for internal
+    # reference-case retrieval during plan generation (searches across all
+    # users' approved plannings), but supplied for the user-facing semantic
+    # search in /planejamentos, which must respect ownership.
+    scope_user_id = payload.get("scope_user_id")
 
     clauses = []
     parameters = []
@@ -699,10 +749,13 @@ def semantic_search_plannings():
         clauses.append("pl.status = %s")
         parameters.append(payload["status"])
 
-    where = "WHERE " + " AND ".join(clauses) if clauses else ""
-
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            if scope_user_id and not is_admin_user(cursor, scope_user_id):
+                clauses.append("pl.created_by_user_id = %s")
+                parameters.append(scope_user_id)
+            where = "WHERE " + " AND ".join(clauses) if clauses else ""
+
             cursor.execute(
                 f"""
                 SELECT
@@ -731,6 +784,7 @@ def semantic_search_plannings():
 @app.get("/plannings/<planning_id>")
 @require_api_key
 def get_planning(planning_id):
+    user_id = request.args.get("user_id")
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute(
@@ -746,6 +800,12 @@ def get_planning(planning_id):
             )
             planning = cursor.fetchone()
             if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            # user_id is optional on purpose: omitted for the internal
+            # reference-case lookup used to enrich plan generation (the
+            # shared "intelligence"), required and enforced for every
+            # user-facing call (the detail/edit pages always send it).
+            if user_id and not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
                 return jsonify({"error": "Planning not found"}), 404
 
             cursor.execute(
@@ -803,11 +863,19 @@ def get_planning(planning_id):
 def update_planning_status(planning_id):
     payload = request.get_json(silent=True) or {}
     status = payload.get("status")
+    user_id = payload.get("user_id")
     if status not in VALID_STATUSES:
         return jsonify({"error": "Invalid status", "allowed": sorted(VALID_STATUSES)}), 400
 
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT created_by_user_id FROM plannings WHERE id = %s", (planning_id,))
+            planning = cursor.fetchone()
+            if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
+                return jsonify({"error": "Planning not found"}), 404
+
             cursor.execute(
                 "UPDATE plannings SET status = %s, updated_at = NOW() WHERE id = %s RETURNING id",
                 (status, planning_id),
@@ -822,8 +890,16 @@ def update_planning_status(planning_id):
 @app.get("/plannings/<planning_id>/versions")
 @require_api_key
 def list_planning_versions(planning_id):
+    user_id = request.args.get("user_id")
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT created_by_user_id FROM plannings WHERE id = %s", (planning_id,))
+            planning = cursor.fetchone()
+            if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
+                return jsonify({"error": "Planning not found"}), 404
+
             cursor.execute(
                 """
                 SELECT version_number, created_by, notes, created_at
@@ -861,11 +937,15 @@ def create_planning_version(planning_id):
             if not isinstance(value, int) or not (1 <= value <= 5):
                 return jsonify({"error": f"Invalid planning_feedback.{field}, must be an integer 1..5"}), 400
 
+    user_id = payload.get("user_id")
+
     with get_connection() as connection:
         with connection.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("SELECT * FROM plannings WHERE id = %s", (planning_id,))
             planning = cursor.fetchone()
             if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
                 return jsonify({"error": "Planning not found"}), 404
 
             cursor.execute(

@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const session = await auth();
   const body = (await request.json().catch(() => null)) as CreateVersionInput | null;
   if (!body) {
     return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
@@ -15,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   let embedding: number[] | null = null;
   try {
-    const current = await getPlanning(id);
+    const current = await getPlanning(id, session?.user?.id);
     embedding = await createEmbedding(
       buildEmbeddingText({
         context: current.planning.context,
@@ -31,12 +32,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   try {
-    const session = await auth();
-    const result = await createPlanningVersion(id, {
-      ...body,
-      embedding,
-      created_by: session?.user?.email ?? "user",
-    });
+    const result = await createPlanningVersion(
+      id,
+      {
+        ...body,
+        embedding,
+        created_by: session?.user?.email ?? "user",
+      },
+      session?.user?.id
+    );
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error("Falha ao criar nova versão do planejamento", error);

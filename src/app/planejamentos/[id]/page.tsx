@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { getPlanning, getSimilarPlannings, listPlanningVersions, type PlanningFeedback } from "@/lib/planner-api/client";
 import { planningDetailToArchitecturePlan } from "@/lib/planner-api/mapper";
 import { PlanResult } from "@/components/PlanResult";
@@ -21,16 +22,18 @@ export default async function PlanejamentoDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const session = await auth();
+  const userId = session?.user?.id;
 
   let detail;
   try {
-    detail = await getPlanning(id);
+    detail = await getPlanning(id, userId);
   } catch {
     notFound();
   }
 
-  const versions = await listPlanningVersions(id).catch(() => []);
-  const similarPlannings = await getSimilarPlannings(id, 5).catch(() => []);
+  const versions = await listPlanningVersions(id, userId).catch(() => []);
+  const similarPlannings = await getSimilarPlannings(id, 5, userId).catch(() => []);
   const plan = planningDetailToArchitecturePlan(detail);
   const activityClassifications = Object.fromEntries(
     detail.activity_feedback.map((feedback) => [feedback.activity_external_id, feedback.classification])

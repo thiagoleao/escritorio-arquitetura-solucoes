@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ClipboardList } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArchitecturePlan } from "@/lib/schema";
 import { formatPlanAsText } from "@/lib/format-plan";
@@ -25,9 +26,9 @@ interface NamedOption {
 }
 
 interface ReferenceUsed {
-  planning_id: string;
-  company: string;
-  project: string | null;
+  planning_id?: string;
+  company?: string;
+  project?: string | null;
   similarity: number;
 }
 
@@ -138,20 +139,13 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-10">
-      <header className="flex items-center justify-between">
+      <header className="flex items-center gap-4">
+        <ClipboardList className="h-10 w-10 shrink-0 text-gray-600 dark:text-gray-300" />
         <div>
           <h1 className="text-2xl font-semibold">Planejador de Soluções de Arquitetura</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Descreva a demanda e gere um roadmap com marcos, atividades, dependências e bloqueios.
           </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/quadro" className="glass-pill glass-pill-secondary glass-pill-sm">
-            Quadro
-          </Link>
-          <Link href="/planejamentos" className="glass-pill glass-pill-secondary glass-pill-sm">
-            Ver histórico
-          </Link>
         </div>
       </header>
 
@@ -179,11 +173,12 @@ export default function Home() {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="project" className="text-sm font-medium">
-              Projeto
+              Projeto <span className="text-red-500">*</span>
             </label>
             <input
               id="project"
               name="project"
+              required
               list="project-options"
               value={project.query}
               onChange={(event) => project.setQuery(event.target.value)}
@@ -199,29 +194,34 @@ export default function Home() {
         </div>
 
         <Field
-          label="Contexto da demanda"
+          label="Qual o contexto da demanda?"
           name="context"
           required
+          placeholder="Ex.: A área de Operações registra a baixa de estoque manualmente em planilhas, o que gera divergências com o sistema de vendas."
           value={formText.context}
           onChange={(value) => setFormText((prev) => ({ ...prev, context: value }))}
         />
         <Field
-          label="Objetivo da solução"
+          label="Qual o objetivo da solução?"
           name="objective"
           required
+          placeholder="Ex.: Automatizar a baixa de estoque integrando o sistema de vendas ao ERP em tempo real."
           value={formText.objective}
           onChange={(value) => setFormText((prev) => ({ ...prev, objective: value }))}
         />
         <Field
-          label="Entregáveis esperados"
+          label="Quais os entregáveis da solução?"
           name="deliverables"
           required
+          placeholder="Ex.: Diagrama de arquitetura, ADR da solução e documento de integração (INT)."
           value={formText.deliverables}
           onChange={(value) => setFormText((prev) => ({ ...prev, deliverables: value }))}
         />
         <Field
           label="Restrições e observações"
           name="constraints"
+          required
+          placeholder="Ex.: A integração deve conviver com o sistema legado durante a transição e não pode gerar downtime em horário comercial."
           value={formText.constraints}
           onChange={(value) => setFormText((prev) => ({ ...prev, constraints: value }))}
         />
@@ -240,7 +240,7 @@ export default function Home() {
           />
         </div>
 
-        <button type="submit" disabled={isLoading} className="glass-pill glass-pill-primary self-start">
+        <button type="submit" disabled={isLoading} className="glass-pill glass-pill-primary self-end">
           {isLoading ? "Gerando planejamento..." : "Gerar planejamento"}
         </button>
       </form>
@@ -270,13 +270,17 @@ export default function Home() {
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Baseado em planejamentos aprovados semelhantes:{" "}
               {plan.references_used.map((reference, index) => (
-                <span key={reference.planning_id}>
+                <span key={reference.planning_id ?? index}>
                   {index > 0 && ", "}
-                  <Link href={`/planejamentos/${reference.planning_id}`} className="glass-link">
-                    {reference.company}
-                    {reference.project ? ` — ${reference.project}` : ""} (
-                    {Math.round(reference.similarity * 100)}%)
-                  </Link>
+                  {reference.planning_id && reference.company ? (
+                    <Link href={`/planejamentos/${reference.planning_id}`} className="glass-link">
+                      {reference.company}
+                      {reference.project ? ` — ${reference.project}` : ""} (
+                      {Math.round(reference.similarity * 100)}%)
+                    </Link>
+                  ) : (
+                    <span>caso semelhante ({Math.round(reference.similarity * 100)}%)</span>
+                  )}
                 </span>
               ))}
             </p>
@@ -293,12 +297,14 @@ function Field({
   label,
   name,
   required,
+  placeholder,
   value,
   onChange,
 }: {
   label: string;
   name: string;
   required?: boolean;
+  placeholder?: string;
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -312,6 +318,7 @@ function Field({
         id={name}
         name={name}
         required={required}
+        placeholder={placeholder}
         rows={3}
         value={value}
         onChange={(event) => onChange(event.target.value)}

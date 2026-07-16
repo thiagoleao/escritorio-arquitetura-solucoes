@@ -39,7 +39,13 @@ export function StatusActions({ planningId, status }: { planningId: string; stat
 
   return (
     <div className="flex items-center gap-2">
-      <span className="rounded-full border border-white/60 bg-white/40 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-white/10">
+      <span
+        className={`rounded-full border px-2 py-0.5 text-xs backdrop-blur-md ${
+          status === "approved"
+            ? "border-green-300/60 bg-green-100/70 text-green-700 dark:border-green-800/50 dark:bg-green-950/50 dark:text-green-300"
+            : "border-white/60 bg-white/40 dark:border-white/10 dark:bg-white/10"
+        }`}
+      >
         {STATUS_LABELS[status] ?? status}
       </span>
       {status !== "approved" && (

@@ -52,3 +52,6 @@ next-env.d.ts
 # Python
 __pycache__/
 *.pyc
+
+# Imagens de origem não otimizadas (versões processadas vivem em public/images e src/app/icon.png)
+/imagens/

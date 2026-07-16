@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { auth } from "@/auth";
 import { getLLMProvider } from "@/lib/llm";
 import {
   extractFiles,
@@ -20,6 +21,8 @@ function getStringField(formData: FormData, key: string): string {
 }
 
 export async function POST(request: Request) {
+  const session = await auth();
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -93,26 +96,34 @@ export async function POST(request: Request) {
           activities: plan.activities,
         })
       );
-      const saved = await createPlanning({
-        company,
-        project: project || undefined,
-        context,
-        objective,
-        deliverables,
-        constraints: constraints || undefined,
-        plan,
-        embedding,
-      });
+      const saved = await createPlanning(
+        {
+          company,
+          project: project || undefined,
+          context,
+          objective,
+          deliverables,
+          constraints: constraints || undefined,
+          plan,
+          embedding,
+        },
+        session?.user?.id
+      );
       planningId = saved.planning_id;
     } catch (saveError) {
       console.error("Falha ao salvar planejamento no histórico", saveError);
       saveWarning = "O planejamento foi gerado, mas não foi possível salvá-lo no histórico.";
     }
 
+    // Reference cases may belong to other users. The similarity search itself
+    // (the shared "intelligence") stays cross-user to improve generation
+    // quality, but identifying details are only shown to admins — members
+    // only see that similar cases informed the plan, not whose they are.
+    const isAdmin = session?.user?.role === "admin";
     const referencesUsed = referenceCases.map((referenceCase) => ({
-      planning_id: referenceCase.planning_id,
-      company: referenceCase.company,
-      project: referenceCase.project,
+      planning_id: isAdmin ? referenceCase.planning_id : undefined,
+      company: isAdmin ? referenceCase.company : undefined,
+      project: isAdmin ? referenceCase.project : undefined,
       similarity: referenceCase.similarity,
     }));
 
