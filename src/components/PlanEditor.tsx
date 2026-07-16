@@ -252,18 +252,11 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Marcos</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Marcos</h2>
         {milestones.map((milestone, index) => (
-          <div
-            key={milestone.clientKey}
-            className={`rounded-md border p-3 ${
-              milestone.removed
-                ? "border-gray-200 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900"
-                : "border-gray-200 dark:border-gray-800"
-            }`}
-          >
+          <div key={milestone.clientKey} className={`glass-card p-3 ${milestone.removed ? "opacity-50" : ""}`}>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500">{milestone.external_id}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">{milestone.external_id}</span>
               <div className="flex gap-1">
                 <IconButton onClick={() => moveMilestone(milestone.clientKey, -1)} disabled={index === 0}>
                   ↑
@@ -277,7 +270,7 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
                 <button
                   type="button"
                   onClick={() => updateMilestone(milestone.clientKey, { removed: !milestone.removed })}
-                  className="rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-700"
+                  className="glass-pill glass-pill-secondary glass-pill-sm"
                 >
                   {milestone.removed ? "Restaurar" : "Remover"}
                 </button>
@@ -287,45 +280,38 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
               value={milestone.title}
               onChange={(e) => updateMilestone(milestone.clientKey, { title: e.target.value })}
               placeholder="Título do marco"
-              className="mt-2 w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="mt-2 w-full glass-input"
             />
             <input
               value={milestone.objective}
               onChange={(e) => updateMilestone(milestone.clientKey, { objective: e.target.value })}
               placeholder="Objetivo"
-              className="mt-2 w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="mt-2 w-full glass-input"
             />
             <textarea
               value={milestone.completion_criteria}
               onChange={(e) => updateMilestone(milestone.clientKey, { completion_criteria: e.target.value })}
               placeholder="Critérios de conclusão (um por linha)"
               rows={2}
-              className="mt-2 w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="mt-2 w-full glass-input"
             />
           </div>
         ))}
         <button
           type="button"
           onClick={addMilestone}
-          className="self-start rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          className="glass-pill glass-pill-secondary self-start"
         >
           Adicionar marco
         </button>
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Atividades</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Atividades</h2>
         {activities.map((activity, index) => (
-          <div
-            key={activity.clientKey}
-            className={`rounded-md border p-3 ${
-              activity.removed
-                ? "border-gray-200 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900"
-                : "border-gray-200 dark:border-gray-800"
-            }`}
-          >
+          <div key={activity.clientKey} className={`glass-card p-3 ${activity.removed ? "opacity-50" : ""}`}>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500">{activity.external_id}</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">{activity.external_id}</span>
               <div className="flex gap-1">
                 <IconButton onClick={() => moveActivity(activity.clientKey, -1)} disabled={index === 0}>
                   ↑
@@ -339,7 +325,7 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
                 <button
                   type="button"
                   onClick={() => updateActivity(activity.clientKey, { removed: !activity.removed })}
-                  className="rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-700"
+                  className="glass-pill glass-pill-secondary glass-pill-sm"
                 >
                   {activity.removed ? "Restaurar" : "Remover"}
                 </button>
@@ -350,29 +336,29 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
               value={activity.title}
               onChange={(e) => updateActivity(activity.clientKey, { title: e.target.value })}
               placeholder="Título"
-              className="mt-2 w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="mt-2 w-full glass-input"
             />
             <textarea
               value={activity.description}
               onChange={(e) => updateActivity(activity.clientKey, { description: e.target.value })}
               placeholder="Descrição"
               rows={2}
-              className="mt-2 w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="mt-2 w-full glass-input"
             />
             <input
               value={activity.expected_output}
               onChange={(e) => updateActivity(activity.clientKey, { expected_output: e.target.value })}
               placeholder="Resultado esperado"
-              className="mt-2 w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="mt-2 w-full glass-input"
             />
 
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-xs text-gray-500">
+              <label className="flex flex-col gap-1 text-xs text-gray-500 dark:text-gray-400">
                 Marco
                 <select
                   value={activity.milestone_external_id}
                   onChange={(e) => updateActivity(activity.clientKey, { milestone_external_id: e.target.value })}
-                  className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  className="glass-input"
                 >
                   {activeMilestones.map((m) => (
                     <option key={m.external_id} value={m.external_id}>
@@ -382,17 +368,17 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1 text-xs text-gray-500">
+              <label className="flex flex-col gap-1 text-xs text-gray-500 dark:text-gray-400">
                 Dependências (separadas por vírgula)
                 <input
                   value={activity.dependencies}
                   onChange={(e) => updateActivity(activity.clientKey, { dependencies: e.target.value })}
-                  className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                  className="glass-input"
                 />
               </label>
             </div>
 
-            <label className="mt-2 flex flex-col gap-1 text-xs text-gray-500">
+            <label className="mt-2 flex flex-col gap-1 text-xs text-gray-500 dark:text-gray-400">
               Classificação
               <select
                 value={activity.classification}
@@ -401,7 +387,7 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
                     classification: e.target.value as ActivityClassification | "",
                   })
                 }
-                className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                className="glass-input"
               >
                 <option value="">(sem classificação)</option>
                 {Object.entries(CLASSIFICATION_LABELS).map(([value, label]) => (
@@ -416,13 +402,13 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
         <button
           type="button"
           onClick={addActivity}
-          className="self-start rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
+          className="glass-pill glass-pill-secondary self-start"
         >
           Adicionar atividade
         </button>
       </section>
 
-      <section className="flex flex-col gap-3 border-t border-gray-200 pt-6 dark:border-gray-800">
+      <section className="flex flex-col gap-3 border-t border-white/40 pt-6 dark:border-white/10">
         <label className="flex items-center gap-2 text-sm font-medium">
           <input type="checkbox" checked={evaluate} onChange={(e) => setEvaluate(e.target.checked)} />
           Avaliar este planejamento
@@ -460,7 +446,7 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
               onChange={(e) => setEvaluationNotes(e.target.value)}
               placeholder="Observações sobre o planejamento"
               rows={2}
-              className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="glass-input"
             />
           </div>
         )}
@@ -475,21 +461,13 @@ export function PlanEditor({ planningId, detail }: { planningId: string; detail:
           value={versionNotes}
           onChange={(e) => setVersionNotes(e.target.value)}
           rows={2}
-          className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+          className="glass-input"
         />
       </div>
 
-      {error && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="glass-alert-error">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={isSaving}
-        className="self-start rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-      >
+      <button type="submit" disabled={isSaving} className="glass-pill glass-pill-primary self-start">
         {isSaving ? "Salvando..." : "Salvar nova versão"}
       </button>
     </form>
@@ -510,7 +488,7 @@ function IconButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-30 dark:border-gray-700"
+      className="glass-pill glass-pill-secondary glass-pill-sm disabled:opacity-30"
     >
       {children}
     </button>
@@ -532,7 +510,7 @@ function ScoreField({
       <select
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="rounded-md border border-gray-300 p-1.5 text-sm dark:border-gray-700 dark:bg-gray-900"
+        className="glass-input"
       >
         {[1, 2, 3, 4, 5].map((n) => (
           <option key={n} value={n}>

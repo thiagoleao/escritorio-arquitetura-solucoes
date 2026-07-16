@@ -34,7 +34,7 @@ export function PlanResult({
       <Section title="Marcos">
         <ul className="flex flex-col gap-3">
           {plan.milestones.map((milestone) => (
-            <li key={milestone.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
+            <li key={milestone.id} className="rounded-2xl border border-white/50 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
               <p className="text-sm font-medium">
                 {milestone.id} — {milestone.title}
               </p>
@@ -48,7 +48,7 @@ export function PlanResult({
       <Section title="Atividades">
         <ul className="flex flex-col gap-3">
           {plan.activities.map((activity) => (
-            <li key={activity.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
+            <li key={activity.id} className="rounded-2xl border border-white/50 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-medium">
                   {activity.id} — {activity.title}
@@ -69,11 +69,11 @@ export function PlanResult({
                   Classificação: {CLASSIFICATION_LABELS[activityClassifications[activity.id]] ?? activityClassifications[activity.id]}
                 </p>
               )}
-              <p className="mt-2 text-xs text-gray-500">Marco: {activity.milestone_id}</p>
-              <p className="text-xs text-gray-500">
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Marco: {activity.milestone_id}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 Dependências: {activity.dependencies.length ? activity.dependencies.join(", ") : "nenhuma"}
               </p>
-              <p className="text-xs text-gray-500">Resultado esperado: {activity.expected_output}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Resultado esperado: {activity.expected_output}</p>
             </li>
           ))}
         </ul>
@@ -86,7 +86,7 @@ export function PlanResult({
               <li key={index} className="text-sm">
                 <p>{blocker.description}</p>
                 {blocker.related_activity_ids.length > 0 && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Atividades relacionadas: {blocker.related_activity_ids.join(", ")}
                   </p>
                 )}
@@ -102,7 +102,7 @@ export function PlanResult({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{title}</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{title}</h3>
       {children}
     </div>
   );

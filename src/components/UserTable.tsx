@@ -75,20 +75,16 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {error && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="glass-alert-error">{error}</p>}
 
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2 rounded-md border border-gray-200 p-3 dark:border-gray-800">
+      <form onSubmit={handleCreate} className="glass-card flex flex-wrap items-end gap-2 p-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium">Nome</label>
           <input
             required
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
-            className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            className="glass-input"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -98,7 +94,7 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
             type="email"
             value={form.email}
             onChange={(event) => setForm({ ...form, email: event.target.value })}
-            className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            className="glass-input"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -108,7 +104,7 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
             type="password"
             value={form.password}
             onChange={(event) => setForm({ ...form, password: event.target.value })}
-            className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            className="glass-input"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -116,24 +112,20 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
           <select
             value={form.role}
             onChange={(event) => setForm({ ...form, role: event.target.value as UserRole })}
-            className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            className="glass-input"
           >
             <option value="member">Membro</option>
             <option value="admin">Administrador</option>
           </select>
         </div>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-        >
+        <button type="submit" disabled={isSubmitting} className="glass-pill glass-pill-primary">
           Adicionar usuário
         </button>
       </form>
 
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800">
+          <tr className="border-b border-white/40 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
             <th className="py-2">Nome</th>
             <th className="py-2">E-mail</th>
             <th className="py-2">Papel</th>
@@ -143,14 +135,14 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
         </thead>
         <tbody>
           {users.map((user) => (
-            <tr key={user.id} className="border-b border-gray-100 dark:border-gray-900">
+            <tr key={user.id} className="border-b border-white/30 dark:border-white/5">
               <td className="py-2">{user.name}</td>
               <td className="py-2">{user.email}</td>
               <td className="py-2">
                 <select
                   value={user.role}
                   onChange={(event) => patchUser(user.id, { role: event.target.value as UserRole })}
-                  className="rounded-md border border-gray-300 p-1 text-xs dark:border-gray-700 dark:bg-gray-900"
+                  className="glass-input text-xs"
                 >
                   <option value="member">{ROLE_LABELS.member}</option>
                   <option value="admin">{ROLE_LABELS.admin}</option>
@@ -160,7 +152,7 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                 <button
                   type="button"
                   onClick={() => patchUser(user.id, { is_active: !user.is_active })}
-                  className="rounded-full border border-gray-300 px-2 py-0.5 text-xs dark:border-gray-700"
+                  className="rounded-full border border-white/60 bg-white/40 px-2 py-0.5 text-xs transition-all hover:scale-[1.02] dark:border-white/10 dark:bg-white/10"
                 >
                   {user.is_active ? "Ativo" : "Inativo"}
                 </button>
@@ -173,12 +165,12 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                       placeholder="Nova senha"
                       value={newPassword}
                       onChange={(event) => setNewPassword(event.target.value)}
-                      className="rounded-md border border-gray-300 p-1 text-xs dark:border-gray-700 dark:bg-gray-900"
+                      className="glass-input text-xs"
                     />
                     <button
                       type="button"
                       onClick={() => handleResetPassword(user.id)}
-                      className="rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-700"
+                      className="glass-pill glass-pill-secondary glass-pill-sm"
                     >
                       Salvar
                     </button>
@@ -188,7 +180,7 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                         setResetPasswordId(null);
                         setNewPassword("");
                       }}
-                      className="rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-700"
+                      className="glass-pill glass-pill-secondary glass-pill-sm"
                     >
                       Cancelar
                     </button>
@@ -197,7 +189,7 @@ export function UserTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                   <button
                     type="button"
                     onClick={() => setResetPasswordId(user.id)}
-                    className="rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-700"
+                    className="glass-pill glass-pill-secondary glass-pill-sm"
                   >
                     Redefinir senha
                   </button>

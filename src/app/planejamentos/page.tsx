@@ -42,19 +42,13 @@ export default async function PlanejamentosPage({
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Planejamentos</h1>
-          <p className="mt-1 text-sm text-gray-500">Histórico de planejamentos gerados.</p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Histórico de planejamentos gerados.</p>
         </div>
         <div className="flex gap-2">
-          <Link
-            href="/quadro"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/quadro" className="glass-pill glass-pill-secondary glass-pill-sm">
             Quadro
           </Link>
-          <Link
-            href="/"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/" className="glass-pill glass-pill-secondary glass-pill-sm">
             Novo planejamento
           </Link>
         </div>
@@ -66,60 +60,50 @@ export default async function PlanejamentosPage({
           name="q"
           defaultValue={q}
           placeholder="Pesquisar em linguagem natural (ex: soluções de IA com processamento documental)"
-          className="w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+          className="glass-input w-full"
         />
-        <button
-          type="submit"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-        >
+        <button type="submit" className="glass-pill glass-pill-secondary">
           Pesquisar
         </button>
         {q && (
-          <Link
-            href="/planejamentos"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/planejamentos" className="glass-pill glass-pill-secondary">
             Limpar
           </Link>
         )}
       </form>
 
-      {error && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="glass-alert-error">{error}</p>}
 
       {!error && plannings.length === 0 && (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           {q ? "Nenhum planejamento semelhante encontrado." : "Nenhum planejamento salvo ainda."}
         </p>
       )}
 
       {plannings.length > 0 && (
-        <ul className="flex flex-col divide-y divide-gray-200 dark:divide-gray-800">
+        <ul className="flex flex-col gap-3">
           {plannings.map((planning) => (
-            <li key={planning.id} className="py-3">
+            <li key={planning.id}>
               <Link
                 href={`/planejamentos/${planning.id}`}
-                className="flex items-center justify-between gap-4 text-sm hover:underline"
+                className="glass-card glass-card-hover flex items-center justify-between gap-4 p-4 text-sm"
               >
                 <div>
                   <p className="font-medium">
                     {planning.company_name}
                     {planning.project_name ? ` — ${planning.project_name}` : ""}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {new Date(planning.created_at).toLocaleString("pt-BR")}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {planning.similarity !== undefined && (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
                       {Math.round(planning.similarity * 100)}% semelhante
                     </span>
                   )}
-                  <span className="rounded-full border border-gray-300 px-2 py-0.5 text-xs dark:border-gray-700">
+                  <span className="rounded-full border border-white/60 bg-white/40 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-white/10">
                     {STATUS_LABELS[planning.status] ?? planning.status}
                   </span>
                 </div>

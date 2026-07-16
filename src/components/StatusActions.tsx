@@ -39,7 +39,7 @@ export function StatusActions({ planningId, status }: { planningId: string; stat
 
   return (
     <div className="flex items-center gap-2">
-      <span className="rounded-full border border-gray-300 px-2 py-0.5 text-xs dark:border-gray-700">
+      <span className="rounded-full border border-white/60 bg-white/40 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-white/10">
         {STATUS_LABELS[status] ?? status}
       </span>
       {status !== "approved" && (
@@ -47,7 +47,7 @@ export function StatusActions({ planningId, status }: { planningId: string; stat
           type="button"
           disabled={isUpdating}
           onClick={() => updateStatus("approved")}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50 dark:border-gray-700"
+          className="glass-pill glass-pill-secondary glass-pill-sm"
         >
           Aprovar
         </button>
@@ -57,7 +57,7 @@ export function StatusActions({ planningId, status }: { planningId: string; stat
           type="button"
           disabled={isUpdating}
           onClick={() => updateStatus("archived")}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50 dark:border-gray-700"
+          className="glass-pill glass-pill-secondary glass-pill-sm"
         >
           Arquivar
         </button>

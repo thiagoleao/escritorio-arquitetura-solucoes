@@ -141,27 +141,21 @@ export default function Home() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Planejador de Soluções de Arquitetura</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Descreva a demanda e gere um roadmap com marcos, atividades, dependências e bloqueios.
           </p>
         </div>
         <div className="flex gap-2">
-          <Link
-            href="/quadro"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/quadro" className="glass-pill glass-pill-secondary glass-pill-sm">
             Quadro
           </Link>
-          <Link
-            href="/planejamentos"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/planejamentos" className="glass-pill glass-pill-secondary glass-pill-sm">
             Ver histórico
           </Link>
         </div>
       </header>
 
-      <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form ref={formRef} onSubmit={handleSubmit} className="glass-card flex flex-col gap-5 p-6">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <label htmlFor="company" className="text-sm font-medium">
@@ -174,7 +168,7 @@ export default function Home() {
               list="company-options"
               value={company.query}
               onChange={(event) => company.setQuery(event.target.value)}
-              className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+              className="glass-input"
             />
             <datalist id="company-options">
               {company.options.map((option) => (
@@ -194,7 +188,7 @@ export default function Home() {
               value={project.query}
               onChange={(event) => project.setQuery(event.target.value)}
               disabled={!matchedCompany && company.query.trim() === ""}
-              className="rounded-md border border-gray-300 p-2 text-sm disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900"
+              className="glass-input"
             />
             <datalist id="project-options">
               {project.options.map((option) => (
@@ -242,59 +236,43 @@ export default function Home() {
             type="file"
             multiple
             accept={ACCEPTED_EXTENSIONS}
-            className="rounded-md border border-gray-300 p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 dark:border-gray-700 dark:file:bg-gray-800"
+            className="glass-input file:mr-3 file:rounded-full file:border-0 file:bg-white/60 file:px-3 file:py-1.5 dark:file:bg-white/10"
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="self-start rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-        >
+        <button type="submit" disabled={isLoading} className="glass-pill glass-pill-primary self-start">
           {isLoading ? "Gerando planejamento..." : "Gerar planejamento"}
         </button>
       </form>
 
-      {error && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="glass-alert-error">{error}</p>}
 
       {plan && (
-        <section className="flex flex-col gap-6 border-t border-gray-200 pt-6 dark:border-gray-800">
+        <section className="glass-card flex flex-col gap-6 p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Resultado</h2>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-            >
+            <button type="button" onClick={handleCopy} className="glass-pill glass-pill-secondary glass-pill-sm">
               {copied ? "Copiado!" : "Copiar conteúdo"}
             </button>
           </div>
 
-          {plan.save_warning && (
-            <p className="rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-              {plan.save_warning}
-            </p>
-          )}
+          {plan.save_warning && <p className="glass-alert-warning">{plan.save_warning}</p>}
           {plan.planning_id && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Salvo no histórico —{" "}
-              <Link href={`/planejamentos/${plan.planning_id}`} className="underline">
+              <Link href={`/planejamentos/${plan.planning_id}`} className="glass-link">
                 ver planejamento
               </Link>
             </p>
           )}
 
           {plan.references_used && plan.references_used.length > 0 && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Baseado em planejamentos aprovados semelhantes:{" "}
               {plan.references_used.map((reference, index) => (
                 <span key={reference.planning_id}>
                   {index > 0 && ", "}
-                  <Link href={`/planejamentos/${reference.planning_id}`} className="underline">
+                  <Link href={`/planejamentos/${reference.planning_id}`} className="glass-link">
                     {reference.company}
                     {reference.project ? ` — ${reference.project}` : ""} (
                     {Math.round(reference.similarity * 100)}%)
@@ -337,7 +315,7 @@ function Field({
         rows={3}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+        className="glass-input"
       />
     </div>
   );

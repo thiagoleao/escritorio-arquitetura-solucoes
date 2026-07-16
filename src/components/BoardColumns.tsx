@@ -125,13 +125,9 @@ function DroppableColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col gap-3 rounded-md border p-3 transition-colors ${
-        isOver
-          ? "border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-950/40"
-          : "border-gray-200 dark:border-gray-800"
-      }`}
+      className={`glass-card flex flex-col gap-3 p-3 ${isOver ? "ring-2 ring-indigo-400/60 dark:ring-indigo-500/50" : ""}`}
     >
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{label}</h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</h2>
       <ul className="flex flex-col gap-2">{children}</ul>
     </div>
   );
@@ -149,10 +145,10 @@ function DraggableCard({ card, pending }: { card: CardData; pending: boolean }) 
         opacity: isDragging ? 0.4 : pending ? 0.6 : 1,
         zIndex: isDragging ? 10 : undefined,
       }}
-      className="relative rounded-md border border-gray-200 p-2 text-sm dark:border-gray-800"
+      className="relative rounded-2xl border border-white/50 bg-white/30 p-2 text-sm transition-all duration-200 hover:brightness-105 dark:border-white/10 dark:bg-white/5"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           {card.company}
           {card.project ? ` — ${card.project}` : ""}
         </p>
@@ -167,7 +163,7 @@ function DraggableCard({ card, pending }: { card: CardData; pending: boolean }) 
         </button>
       </div>
       <p className="font-medium">{card.title}</p>
-      <Link href={`/planejamentos/${card.planningId}`} className="mt-1 block text-xs text-gray-400 underline">
+      <Link href={`/planejamentos/${card.planningId}`} className="glass-link mt-1 block text-xs text-gray-400">
         ver planejamento
       </Link>
     </li>

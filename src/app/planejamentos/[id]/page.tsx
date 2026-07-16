@@ -44,7 +44,7 @@ export default async function PlanejamentoDetailPage({
             {detail.planning.company_name}
             {detail.planning.project_name ? ` — ${detail.planning.project_name}` : ""}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Versão {detail.version.version_number} · {new Date(detail.planning.created_at).toLocaleString("pt-BR")}
           </p>
           <div className="mt-2">
@@ -52,16 +52,10 @@ export default async function PlanejamentoDetailPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Link
-            href={`/planejamentos/${id}/editar`}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href={`/planejamentos/${id}/editar`} className="glass-pill glass-pill-secondary glass-pill-sm">
             Editar
           </Link>
-          <Link
-            href="/planejamentos"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/planejamentos" className="glass-pill glass-pill-secondary glass-pill-sm">
             Voltar
           </Link>
         </div>
@@ -86,7 +80,7 @@ export default async function PlanejamentoDetailPage({
           <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
             {(Object.entries(SCORE_LABELS) as Array<[keyof typeof SCORE_LABELS, string]>).map(([key, label]) => (
               <div key={key}>
-                <dt className="text-xs text-gray-500">{label}</dt>
+                <dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt>
                 <dd className="font-medium">{detail.planning_feedback?.[key]} / 5</dd>
               </div>
             ))}
@@ -120,25 +114,25 @@ export default async function PlanejamentoDetailPage({
         </dl>
       </Section>
 
-      <div className="border-t border-gray-200 pt-6 dark:border-gray-800">
+      <div className="glass-card p-6">
         <PlanResult plan={plan} activityClassifications={activityClassifications} />
       </div>
 
       {similarPlannings.length > 0 && (
         <Section title="Planejamentos semelhantes">
-          <ul className="flex flex-col divide-y divide-gray-200 dark:divide-gray-800">
+          <ul className="flex flex-col gap-2">
             {similarPlannings.map((similar) => (
-              <li key={similar.id} className="py-2">
+              <li key={similar.id}>
                 <Link
                   href={`/planejamentos/${similar.id}`}
-                  className="flex items-center justify-between gap-4 text-sm hover:underline"
+                  className="glass-card glass-card-hover flex items-center justify-between gap-4 p-3 text-sm"
                 >
                   <span>
                     {similar.company_name}
                     {similar.project_name ? ` — ${similar.project_name}` : ""}
                   </span>
                   {similar.similarity !== undefined && (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
                       {Math.round(similar.similarity * 100)}% semelhante
                     </span>
                   )}
@@ -154,8 +148,8 @@ export default async function PlanejamentoDetailPage({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{title}</h2>
+    <div className="glass-card flex flex-col gap-2 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{title}</h2>
       {children}
     </div>
   );

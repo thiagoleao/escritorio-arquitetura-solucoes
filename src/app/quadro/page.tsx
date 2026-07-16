@@ -24,14 +24,11 @@ export default async function QuadroPage({
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Quadro</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Acompanhamento de execução dos projetos aprovados, agrupados por empresa.
           </p>
         </div>
-        <Link
-          href="/planejamentos"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-        >
+        <Link href="/planejamentos" className="glass-pill glass-pill-secondary glass-pill-sm">
           Ver histórico
         </Link>
       </header>
@@ -42,37 +39,27 @@ export default async function QuadroPage({
           name="company"
           defaultValue={company}
           placeholder="Filtrar por empresa"
-          className="w-full max-w-sm rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+          className="glass-input w-full max-w-sm"
         />
-        <button
-          type="submit"
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-        >
+        <button type="submit" className="glass-pill glass-pill-secondary">
           Filtrar
         </button>
         {company && (
-          <Link
-            href="/quadro"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700"
-          >
+          <Link href="/quadro" className="glass-pill glass-pill-secondary">
             Ver todas
           </Link>
         )}
       </form>
 
-      {error && (
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="glass-alert-error">{error}</p>}
 
       {!error && board.length === 0 && (
-        <p className="text-sm text-gray-500">Nenhum projeto aprovado no momento.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum projeto aprovado no momento.</p>
       )}
 
       {board.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <section className="glass-card flex flex-col gap-2 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Progresso por projeto
           </h2>
           <ul className="flex flex-col gap-1 text-sm">
@@ -82,7 +69,7 @@ export default async function QuadroPage({
                   {entry.company_name}
                   {entry.project_name ? ` — ${entry.project_name}` : ""}
                 </span>
-                <span className="text-gray-500">{entry.completion_percentage}%</span>
+                <span className="text-gray-500 dark:text-gray-400">{entry.completion_percentage}%</span>
               </li>
             ))}
           </ul>
