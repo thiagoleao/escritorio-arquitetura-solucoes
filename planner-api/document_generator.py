@@ -29,6 +29,14 @@ REQUIRED_FIELDS = {
     ],
 }
 
+# Row background colors extracted from the real RFID-INT-001.docx
+STATUS_COLORS = {
+    "PENDENTE": "FDECEA",
+    "PARCIAL": "FFF3CD",
+    "DEFINIDO": "E8F5E9",
+}
+DEFAULT_ROW_COLOR = "FFFFFF"
+
 DEFAULT_CONTEXT = {
     "documento_adr": {
         "dominio": "",
@@ -37,26 +45,28 @@ DEFAULT_CONTEXT = {
         "subsecoes_contexto": [],
         "subsecoes_decisao": [],
         "alternativas": [],
-        "opcao_a_nome": "",
-        "opcao_b_nome": "",
+        "opcao_a_nome": "Opção A",
+        "opcao_b_nome": "Opção B",
         "tabela_comparativa": [],
-        "fluxo_integracao": None,
+        "fluxo_nome": "",
+        "fluxo_intro": "",
+        "fluxo_passos": [],
+        "fluxo_subsecoes": [],
         "consequencias_positivas": [],
         "consequencias_negativas": [],
         "riscos": [],
+        "lacunas_intro": "As seguintes informações ainda precisam ser confirmadas antes da implementação:",
         "lacunas_tecnicas": [],
-        "revisao_e_evolucao": "",
+        "revisao_intro": "Esta ADR deve ser revisada nos seguintes eventos:",
+        "revisao_e_evolucao": [],
     },
     "documento_int": {
         "adr_referencia": "",
         "prazo_rollout": "",
         "solicitantes": "",
         "autores": "",
-        "resumo_intro": "",
         "resumo_por_responsavel": [],
-        "itens_em_aberto_intro": "",
         "itens_em_aberto": [],
-        "pode_iniciar_intro": "",
         "pode_iniciar_agora": [],
         "itens_definidos": [],
         "proximos_passos": [],
@@ -73,6 +83,27 @@ def validate_artifact_data(activity_type, artifact_data):
         raise ValueError(f"Campos obrigatórios ausentes em artifact_data: {', '.join(missing)}")
 
 
+def _normalize(activity_type, context):
+    # Footer label defaults to the document title
+    if not context.get("titulo_rodape"):
+        context["titulo_rodape"] = context.get("titulo", "")
+
+    if activity_type == "documento_int":
+        # Inject the status row color used by the template's {% cellbg %} tags
+        for item in context.get("itens_em_aberto", []) or []:
+            if isinstance(item, dict) and not item.get("cor"):
+                status = str(item.get("status", "")).strip().upper()
+                item["cor"] = STATUS_COLORS.get(status, DEFAULT_ROW_COLOR)
+
+    if activity_type == "documento_adr":
+        # Accept a plain string for revisao_e_evolucao (older payloads)
+        value = context.get("revisao_e_evolucao")
+        if isinstance(value, str):
+            context["revisao_e_evolucao"] = [value] if value else []
+
+    return context
+
+
 def render_document(activity_type, artifact_data):
     template_path = DOCUMENT_TEMPLATES.get(activity_type)
     if not template_path:
@@ -81,11 +112,10 @@ def render_document(activity_type, artifact_data):
     validate_artifact_data(activity_type, artifact_data)
 
     context = {
-        "pagina": 1,
-        "total_paginas": 1,
         **DEFAULT_CONTEXT.get(activity_type, {}),
         **artifact_data,
     }
+    context = _normalize(activity_type, context)
 
     doc = DocxTemplate(template_path)
     doc.render(context, autoescape=True)
