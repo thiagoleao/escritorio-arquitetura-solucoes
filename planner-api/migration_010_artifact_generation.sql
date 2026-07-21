@@ -1,0 +1,4 @@
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_type TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS artifact_data JSONB;
+
+ALTER TABLE plannings ADD COLUMN IF NOT EXISTS deliverable_types JSONB NOT NULL DEFAULT '[]';

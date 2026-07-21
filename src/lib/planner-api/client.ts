@@ -124,6 +124,8 @@ export interface CreatePlanningInput {
 
 export type ExecutionStatus = "todo" | "doing" | "done";
 
+export type ActivityType = "diagrama_arquitetura" | "documento_adr" | "documento_int";
+
 export interface BoardActivity {
   external_id: string;
   title: string;
@@ -133,6 +135,8 @@ export interface BoardActivity {
   dependencies: string[];
   status: "ready" | "blocked";
   execution_status: ExecutionStatus;
+  activity_type: ActivityType | null;
+  artifact_data: Record<string, unknown> | null;
 }
 
 export interface BoardEntry {
@@ -375,6 +379,8 @@ export interface UpdateActivityDetailsInput {
   description?: string;
   expected_output?: string;
   dependencies?: string[];
+  activity_type?: ActivityType | null;
+  artifact_data?: Record<string, unknown> | null;
 }
 
 export async function updateActivityDetails(
@@ -382,12 +388,40 @@ export async function updateActivityDetails(
   activityExternalId: string,
   input: UpdateActivityDetailsInput,
   userId?: string
-): Promise<{ external_id: string; title: string; description: string; expected_output: string; dependencies: string[] }> {
+): Promise<{
+  external_id: string;
+  title: string;
+  description: string;
+  expected_output: string;
+  dependencies: string[];
+  activity_type: ActivityType | null;
+  artifact_data: Record<string, unknown> | null;
+}> {
   const response = await authenticatedFetch(`/plannings/${planningId}/activities/${activityExternalId}`, {
     method: "PATCH",
     body: JSON.stringify({ ...input, user_id: userId }),
   });
   return parseJsonOrThrow(response, "atualizar os detalhes da atividade");
+}
+
+export async function getActivityDocument(
+  planningId: string,
+  activityExternalId: string,
+  userId?: string
+): Promise<{ blob: Blob; filename: string }> {
+  const params = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  const response = await authenticatedFetch(
+    `/plannings/${planningId}/activities/${activityExternalId}/document${params}`
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new PlannerApiError(response.status, `Falha ao gerar o documento: ${response.status} ${text}`);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `${activityExternalId}.docx`;
+  const blob = await response.blob();
+  return { blob, filename };
 }
 
 export async function updateActivityExecutionStatus(

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight, Download, X } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -15,7 +15,47 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import type { BoardEntry, ExecutionStatus } from "@/lib/planner-api/client";
+import type { ActivityType, BoardEntry, ExecutionStatus } from "@/lib/planner-api/client";
+
+const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
+  diagrama_arquitetura: "Diagrama de arquitetura",
+  documento_adr: "Documento ADR",
+  documento_int: "Documento de integração (INT)",
+};
+
+const ARTIFACT_DATA_EXAMPLES: Record<ActivityType, Record<string, unknown>> = {
+  diagrama_arquitetura: {},
+  documento_adr: {
+    codigo: "ADR-XXX-001",
+    titulo: "",
+    status: "Proposta",
+    data: "",
+    dominio: "",
+    autores: "",
+    aprovadores: "",
+    contexto: "",
+    decisao: "",
+    alternativas: [{ nome: "", descricao: "" }],
+    consequencias_positivas: [""],
+    consequencias_negativas: [""],
+    riscos: [{ descricao: "", impacto: "", mitigacao: "" }],
+    lacunas_tecnicas: [""],
+    revisao_e_evolucao: "",
+  },
+  documento_int: {
+    codigo: "INT-XXX-001",
+    titulo: "",
+    status: "Em levantamento",
+    versao: "1.0",
+    data: "",
+    adr_referencia: "",
+    solicitantes: "",
+    autores: "",
+    objetivo: "",
+    itens_em_aberto: [{ item: "", responsavel: "", prazo: "", status: "PENDENTE", observacoes: "" }],
+    proximos_passos: [""],
+  },
+};
 
 const COLUMNS: Array<{ key: ExecutionStatus; label: string }> = [
   { key: "todo", label: "A Fazer" },
@@ -40,6 +80,8 @@ interface CardData {
   expectedOutput: string;
   dependencies: string[];
   readyStatus: "ready" | "blocked";
+  activityType: ActivityType | null;
+  artifactData: Record<string, unknown> | null;
 }
 
 function cardKey(card: CardData): string {
@@ -60,6 +102,8 @@ function toCards(board: BoardEntry[]): CardData[] {
         expectedOutput: activity.expected_output,
         dependencies: activity.dependencies,
         readyStatus: activity.status,
+        activityType: activity.activity_type,
+        artifactData: activity.artifact_data,
       }))
     )
     .sort((a, b) => a.projectCode.localeCompare(b.projectCode));
@@ -305,7 +349,12 @@ function TaskDetailModal({
   const [description, setDescription] = useState(card.description);
   const [expectedOutput, setExpectedOutput] = useState(card.expectedOutput);
   const [dependencies, setDependencies] = useState(card.dependencies.join(", "));
+  const [activityType, setActivityType] = useState<ActivityType | "">(card.activityType ?? "");
+  const [artifactDataText, setArtifactDataText] = useState(
+    card.artifactData ? JSON.stringify(card.artifactData, null, 2) : ""
+  );
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function cancelEditing() {
@@ -314,12 +363,32 @@ function TaskDetailModal({
     setDescription(card.description);
     setExpectedOutput(card.expectedOutput);
     setDependencies(card.dependencies.join(", "));
+    setActivityType(card.activityType ?? "");
+    setArtifactDataText(card.artifactData ? JSON.stringify(card.artifactData, null, 2) : "");
     setError(null);
   }
 
+  function handleActivityTypeChange(value: ActivityType | "") {
+    setActivityType(value);
+    if (value && !artifactDataText.trim()) {
+      setArtifactDataText(JSON.stringify(ARTIFACT_DATA_EXAMPLES[value], null, 2));
+    }
+  }
+
   async function handleSave() {
-    setIsSaving(true);
     setError(null);
+
+    let parsedArtifactData: Record<string, unknown> | null = null;
+    if (activityType && artifactDataText.trim()) {
+      try {
+        parsedArtifactData = JSON.parse(artifactDataText);
+      } catch {
+        setError("Os dados do artefato precisam ser um JSON válido.");
+        return;
+      }
+    }
+
+    setIsSaving(true);
     const newDependencies = dependencies
       .split(",")
       .map((value) => value.trim())
@@ -334,12 +403,22 @@ function TaskDetailModal({
           description,
           expected_output: expectedOutput,
           dependencies: newDependencies,
+          activity_type: activityType || null,
+          artifact_data: parsedArtifactData,
         }),
       });
       if (!response.ok) {
         throw new Error("Falha ao salvar");
       }
-      onSaved({ ...card, title, description, expectedOutput, dependencies: newDependencies });
+      onSaved({
+        ...card,
+        title,
+        description,
+        expectedOutput,
+        dependencies: newDependencies,
+        activityType: activityType || null,
+        artifactData: parsedArtifactData,
+      });
       setIsEditing(false);
     } catch {
       setError("Falha ao salvar as alterações. Tente novamente.");
@@ -347,6 +426,35 @@ function TaskDetailModal({
       setIsSaving(false);
     }
   }
+
+  async function handleDownloadDocument() {
+    setIsDownloading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/board/activities/${card.planningId}/${card.externalId}/document`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? "Falha ao gerar o documento");
+      }
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : "documento.docx";
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao gerar o documento. Tente novamente.");
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
+  const canGenerateDocument =
+    !isEditing && (card.activityType === "documento_adr" || card.activityType === "documento_int") && card.artifactData;
 
   return (
     <div
@@ -448,6 +556,49 @@ function TaskDetailModal({
           </div>
         )}
 
+        {isEditing && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Tipo de artefato
+            </h3>
+            <select
+              value={activityType}
+              onChange={(event) => handleActivityTypeChange(event.target.value as ActivityType | "")}
+              className="glass-input mt-1 w-full text-sm"
+            >
+              <option value="">Nenhum</option>
+              {(Object.keys(ACTIVITY_TYPE_LABELS) as ActivityType[]).map((type) => (
+                <option key={type} value={type}>
+                  {ACTIVITY_TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {isEditing && (activityType === "documento_adr" || activityType === "documento_int") && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Dados do documento (JSON)
+            </h3>
+            <textarea
+              value={artifactDataText}
+              onChange={(event) => setArtifactDataText(event.target.value)}
+              rows={10}
+              className="glass-input mt-1 w-full font-mono text-xs"
+            />
+          </div>
+        )}
+
+        {!isEditing && card.activityType && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Tipo de artefato
+            </h3>
+            <p className="mt-1 text-sm">{ACTIVITY_TYPE_LABELS[card.activityType]}</p>
+          </div>
+        )}
+
         {error && <p className="glass-alert-error">{error}</p>}
 
         <div className="flex justify-end gap-2">
@@ -471,13 +622,26 @@ function TaskDetailModal({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              className="glass-pill glass-pill-secondary glass-pill-sm"
-            >
-              Editar
-            </button>
+            <>
+              {canGenerateDocument && (
+                <button
+                  type="button"
+                  onClick={handleDownloadDocument}
+                  disabled={isDownloading}
+                  className="glass-pill glass-pill-secondary glass-pill-sm flex items-center gap-1"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {isDownloading ? "Gerando..." : "Baixar documento"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="glass-pill glass-pill-secondary glass-pill-sm"
+              >
+                Editar
+              </button>
+            </>
           )}
         </div>
       </div>

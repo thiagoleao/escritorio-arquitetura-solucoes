@@ -4,10 +4,11 @@ from functools import wraps
 
 import bcrypt
 import psycopg2
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from pgvector.psycopg2 import register_vector
 from psycopg2.extras import Json, RealDictCursor
 
+from document_generator import DOCUMENT_TEMPLATES, render_document
 from registry import resolve_company, resolve_project
 
 app = Flask(__name__)
@@ -22,6 +23,7 @@ VALID_STATUSES = {"generated", "in_review", "reviewed", "approved", "archived"}
 VALID_CLASSIFICATIONS = {"fez_sentido", "parcial", "nao_fez_sentido"}
 VALID_EXECUTION_STATUSES = {"todo", "doing", "done"}
 VALID_ROLES = {"admin", "member"}
+VALID_ACTIVITY_TYPES = {"diagrama_arquitetura", "documento_adr", "documento_int"}
 
 MILESTONE_COMPARE_FIELDS = ["title", "objective", "completion_criteria"]
 ACTIVITY_COMPARE_FIELDS = [
@@ -617,6 +619,7 @@ def get_board():
                     """
                     SELECT a.external_id, a.title, a.milestone_external_id,
                            a.description, a.expected_output, a.dependencies, a.status,
+                           a.activity_type, a.artifact_data,
                            COALESCE(ae.status, 'todo') AS execution_status
                     FROM activities a
                     LEFT JOIN activity_execution ae
@@ -665,6 +668,16 @@ def update_activity_details(planning_id, activity_external_id):
     if "dependencies" in payload:
         fields.append("dependencies = %s")
         values.append(Json(payload["dependencies"]))
+    if "activity_type" in payload:
+        activity_type = payload["activity_type"]
+        if activity_type is not None and activity_type not in VALID_ACTIVITY_TYPES:
+            return jsonify({"error": "Invalid activity_type", "allowed": sorted(VALID_ACTIVITY_TYPES)}), 400
+        fields.append("activity_type = %s")
+        values.append(activity_type)
+    if "artifact_data" in payload:
+        artifact_data = payload["artifact_data"]
+        fields.append("artifact_data = %s")
+        values.append(Json(artifact_data) if artifact_data is not None else None)
 
     if not fields:
         return jsonify({"error": "No fields to update"}), 400
@@ -700,13 +713,60 @@ def update_activity_details(planning_id, activity_external_id):
                 WHERE pv.id = a.planning_version_id
                     AND pl.id = pv.planning_id AND pl.current_version = pv.version_number
                     AND pl.id = %s AND a.external_id = %s
-                RETURNING a.external_id, a.title, a.description, a.expected_output, a.dependencies
+                RETURNING a.external_id, a.title, a.description, a.expected_output, a.dependencies,
+                          a.activity_type, a.artifact_data
                 """,
                 values,
             )
             updated = cursor.fetchone()
 
     return jsonify(updated)
+
+
+@app.get("/plannings/<planning_id>/activities/<activity_external_id>/document")
+@require_api_key
+def get_activity_document(planning_id, activity_external_id):
+    user_id = request.args.get("user_id")
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT created_by_user_id FROM plannings WHERE id = %s", (planning_id,))
+            planning = cursor.fetchone()
+            if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
+                return jsonify({"error": "Planning not found"}), 404
+
+            cursor.execute(
+                """
+                SELECT a.activity_type, a.artifact_data
+                FROM activities a
+                JOIN planning_versions pv ON pv.id = a.planning_version_id
+                JOIN plannings pl ON pl.id = pv.planning_id AND pl.current_version = pv.version_number
+                WHERE pl.id = %s AND a.external_id = %s
+                """,
+                (planning_id, activity_external_id),
+            )
+            activity = cursor.fetchone()
+
+    if not activity:
+        return jsonify({"error": "Activity not found"}), 404
+    if activity["activity_type"] not in DOCUMENT_TEMPLATES:
+        return jsonify({"error": "Activity has no generable document type", "allowed": sorted(DOCUMENT_TEMPLATES)}), 400
+    if not activity["artifact_data"]:
+        return jsonify({"error": "Activity is missing artifact_data"}), 400
+
+    try:
+        file_bytes = render_document(activity["activity_type"], activity["artifact_data"])
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    filename = f"{activity['activity_type']}_{activity_external_id}.docx"
+    return Response(
+        file_bytes,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.patch("/plannings/<planning_id>/activities/<activity_external_id>/status")

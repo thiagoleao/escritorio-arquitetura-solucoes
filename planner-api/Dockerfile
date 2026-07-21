@@ -8,6 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py ./
+COPY templates/ ./templates/
 
 CMD exec gunicorn \
   --bind :${PORT:-8080} \
