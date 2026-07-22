@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Save, Send, Sparkles } from "lucide-react";
-import type { DiagramGraph, DiagramRefineResponse, RefineTurn } from "@/lib/llm/diagram-refiner";
+import { Download, Plus, Save, Send, Sparkles, Trash2 } from "lucide-react";
+import type {
+  DiagramGraph,
+  DiagramRefineResponse,
+  LaneDefinida,
+  RefineTurn,
+} from "@/lib/llm/diagram-refiner";
 
 const FASE_LABELS: Record<string, string> = {
   as_is: "AS IS",
@@ -40,6 +45,11 @@ export function DiagramStudio({
   const [message, setMessage] = useState("");
   const [historico, setHistorico] = useState<RefineTurn[]>([]);
   const [graph, setGraph] = useState<DiagramGraph | null>(isGraph(initialGraph) ? initialGraph : null);
+  const [lanes, setLanes] = useState<LaneDefinida[]>(() =>
+    isGraph(initialGraph)
+      ? initialGraph.lanes.map((lane) => ({ nome: lane.nome, papel: lane.papel }))
+      : [{ nome: "", papel: "sistema_origem" }]
+  );
   const [pendingQuestions, setPendingQuestions] = useState<string[]>([]);
   const [isRefining, setIsRefining] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -69,6 +79,7 @@ export function DiagramStudio({
           grafoAtual: graph,
           historico: updatedHistory,
           mensagem: newMessage,
+          lanesDefinidas: lanes.filter((lane) => lane.nome.trim()),
         }),
       });
       if (!response.ok) {
@@ -163,7 +174,64 @@ export function DiagramStudio({
           placeholder={"AS IS\n0 - Sistema origem (legado)\n1 - Job X processa... TEXTO SETA: ativa a sequência\n..."}
           className="glass-input w-full font-mono text-xs"
         />
-        <div className="flex justify-end">
+
+        <h2 className="mt-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Lanes do diagrama
+        </h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Os nomes das lanes são seus — o assistente usa exatamente o que você definir aqui (o papel controla a
+          cor). Se deixar vazio, ele vai perguntar em vez de batizar sozinho.
+        </p>
+        <ul className="flex flex-col gap-2">
+          {lanes.map((lane, index) => (
+            <li key={index} className="flex gap-2">
+              <input
+                value={lane.nome}
+                onChange={(event) =>
+                  setLanes((prev) =>
+                    prev.map((entry, i) => (i === index ? { ...entry, nome: event.target.value } : entry))
+                  )
+                }
+                placeholder={`Nome da lane ${index + 1} (ex.: Oracle Retail Legacy (RMS))`}
+                className="glass-input w-full text-sm"
+              />
+              <select
+                value={lane.papel}
+                onChange={(event) =>
+                  setLanes((prev) =>
+                    prev.map((entry, i) =>
+                      i === index ? { ...entry, papel: event.target.value as LaneDefinida["papel"] } : entry
+                    )
+                  )
+                }
+                className="glass-input w-56 shrink-0 text-sm"
+              >
+                {(Object.keys(PAPEL_LABELS) as LaneDefinida["papel"][]).map((papel) => (
+                  <option key={papel} value={papel}>
+                    {PAPEL_LABELS[papel]}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setLanes((prev) => prev.filter((_, i) => i !== index))}
+                aria-label="Remover lane"
+                className="glass-pill glass-pill-secondary glass-pill-sm px-2"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setLanes((prev) => [...prev, { nome: "", papel: "destino_monitoramento" }])}
+            className="glass-pill glass-pill-secondary glass-pill-sm flex items-center gap-1"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Adicionar lane
+          </button>
           <button
             type="button"
             onClick={() => callRefine()}

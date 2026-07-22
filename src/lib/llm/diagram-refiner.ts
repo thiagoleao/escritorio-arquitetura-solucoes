@@ -71,11 +71,17 @@ export interface RefineTurn {
   texto: string;
 }
 
+export interface LaneDefinida {
+  nome: string;
+  papel: "sistema_origem" | "orquestracao" | "api_backend" | "destino_monitoramento";
+}
+
 export interface DiagramRefineInput {
   discovery: string;
   grafoAtual: DiagramGraph | null;
   historico: RefineTurn[];
   mensagem?: string;
+  lanesDefinidas?: LaneDefinida[];
 }
 
 const SYSTEM_INSTRUCTIONS = `Você é o assistente de estruturação de diagramas do Escritório de Soluções de Arquitetura.
@@ -99,6 +105,7 @@ O arquiteto costuma mapear o fluxo como lista numerada. Convenções:
 - linha_inferior: use em nós que recebem arestas com rótulos longos (ex.: diretório de status) para evitar cruzamento visual.
 
 ## Regras de comportamento (OBRIGATÓRIAS)
+0. OS NOMES DAS LANES SÃO DECISÃO DO ARQUITETO, NUNCA SUA. Se o arquiteto forneceu a lista "Lanes definidas pelo arquiteto", use EXATAMENTE esses nomes e papéis — não crie lanes fora da lista, não renomeie, não abrevie. Se ele NÃO forneceu a lista e o discovery não nomeia as lanes explicitamente, sua primeira pergunta é quais lanes o diagrama deve ter (nome e papel de cada uma) — não batize lanes por conta própria a partir do texto.
 1. AMBIGUIDADE → PERGUNTA. Se uma linha do discovery não deixa claro: se é nó ou aresta; em qual lane vive; qual o papel/tipo; qual fase; ou como se conecta — você PARA e pergunta (tipo_resposta='perguntas'). NUNCA invente ou infira silenciosamente o que não está no texto.
 2. Você PODE devolver grafo parcial + perguntas: modele o que está claro (tipo_resposta='grafo') e liste em 'perguntas' o que ficou pendente.
 3. NUNCA crie elementos "TBD" por conta própria. Só quando o arquiteto explicitamente disser que algo fica a definir.
@@ -110,6 +117,18 @@ O arquiteto costuma mapear o fluxo como lista numerada. Convenções:
 function buildUserMessage(input: DiagramRefineInput): string {
   const parts: string[] = [];
   parts.push("## Texto de discovery\n" + (input.discovery.trim() || "(não fornecido)"));
+  if (input.lanesDefinidas && input.lanesDefinidas.length > 0) {
+    const laneList = input.lanesDefinidas
+      .map((lane) => `- "${lane.nome}" (papel: ${lane.papel})`)
+      .join("\n");
+    parts.push(
+      "## Lanes definidas pelo arquiteto (use exatamente estas — nome e papel; não crie outras)\n" + laneList
+    );
+  } else {
+    parts.push(
+      "## Lanes definidas pelo arquiteto\n(nenhuma — se o discovery não nomear as lanes explicitamente, pergunte quais devem ser antes de criá-las)"
+    );
+  }
   if (input.grafoAtual) {
     parts.push("## Grafo atual (edições devem ser incrementais sobre ele)\n" + JSON.stringify(input.grafoAtual, null, 2));
   } else {

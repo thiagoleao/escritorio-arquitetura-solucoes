@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       grafoAtual: body.grafoAtual ?? null,
       historico: Array.isArray(body.historico) ? body.historico : [],
       mensagem: body.mensagem,
+      lanesDefinidas: Array.isArray(body.lanesDefinidas) ? body.lanesDefinidas : [],
     });
     return NextResponse.json(result);
   } catch (error) {
