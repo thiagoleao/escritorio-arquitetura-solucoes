@@ -8,6 +8,7 @@ from flask import Flask, Response, jsonify, request
 from pgvector.psycopg2 import register_vector
 from psycopg2.extras import Json, RealDictCursor
 
+from diagram_renderer import render_diagram
 from document_generator import DOCUMENT_TEMPLATES, render_document
 from registry import resolve_company, resolve_project
 
@@ -765,6 +766,52 @@ def get_activity_document(planning_id, activity_external_id):
     return Response(
         file_bytes,
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/plannings/<planning_id>/activities/<activity_external_id>/diagram")
+@require_api_key
+def get_activity_diagram(planning_id, activity_external_id):
+    user_id = request.args.get("user_id")
+
+    with get_connection() as connection:
+        with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT created_by_user_id FROM plannings WHERE id = %s", (planning_id,))
+            planning = cursor.fetchone()
+            if not planning:
+                return jsonify({"error": "Planning not found"}), 404
+            if not is_admin_user(cursor, user_id) and not owns_planning(planning, user_id):
+                return jsonify({"error": "Planning not found"}), 404
+
+            cursor.execute(
+                """
+                SELECT a.activity_type, a.artifact_data
+                FROM activities a
+                JOIN planning_versions pv ON pv.id = a.planning_version_id
+                JOIN plannings pl ON pl.id = pv.planning_id AND pl.current_version = pv.version_number
+                WHERE pl.id = %s AND a.external_id = %s
+                """,
+                (planning_id, activity_external_id),
+            )
+            activity = cursor.fetchone()
+
+    if not activity:
+        return jsonify({"error": "Activity not found"}), 404
+    if activity["activity_type"] != "diagrama_arquitetura":
+        return jsonify({"error": "Activity is not classified as diagrama_arquitetura"}), 400
+    if not activity["artifact_data"]:
+        return jsonify({"error": "Activity is missing artifact_data (grafo do diagrama)"}), 400
+
+    try:
+        file_bytes = render_diagram(activity["artifact_data"])
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    filename = f"diagrama_{activity_external_id}.drawio"
+    return Response(
+        file_bytes,
+        mimetype="application/xml",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 

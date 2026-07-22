@@ -424,6 +424,26 @@ export async function getActivityDocument(
   return { blob, filename };
 }
 
+export async function getActivityDiagram(
+  planningId: string,
+  activityExternalId: string,
+  userId?: string
+): Promise<{ blob: Blob; filename: string }> {
+  const params = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  const response = await authenticatedFetch(
+    `/plannings/${planningId}/activities/${activityExternalId}/diagram${params}`
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new PlannerApiError(response.status, `Falha ao gerar o diagrama: ${response.status} ${text}`);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `${activityExternalId}.drawio`;
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
 export async function updateActivityExecutionStatus(
   planningId: string,
   activityExternalId: string,

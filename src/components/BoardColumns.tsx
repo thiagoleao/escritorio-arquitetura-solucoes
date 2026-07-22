@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, Download, X } from "lucide-react";
+import { ArrowRight, Download, Workflow, X } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -640,6 +640,15 @@ function TaskDetailModal({
             </>
           ) : (
             <>
+              {card.activityType === "diagrama_arquitetura" && (
+                <Link
+                  href={`/diagramas/${card.planningId}/${card.externalId}`}
+                  className="glass-pill glass-pill-secondary glass-pill-sm flex items-center gap-1"
+                >
+                  <Workflow className="h-3.5 w-3.5" />
+                  Gerar diagrama
+                </Link>
+              )}
               {canGenerateDocument && (
                 <button
                   type="button"
